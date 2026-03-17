@@ -1264,18 +1264,38 @@ impl TreeState {
             start_tracking_matcher,
             force_tracking_matcher,
             max_new_file_size,
+            changed_files,
         } = options;
 
         let sparse_matcher = self.sparse_matcher();
 
-        let fsmonitor_clock_needs_save = self.fsmonitor_settings != FsmonitorSettings::None;
-        let mut is_dirty = fsmonitor_clock_needs_save;
+        // If the caller provided a pre-computed changed-file list, use it
+        // directly instead of querying the configured fsmonitor. This lets
+        // embedders supply their own file-change detection without jj
+        // interacting with watchman (avoiding trigger conflicts when multiple
+        // jj repos share the same working directory).
+        let fsmonitor_clock_needs_save;
+        let mut is_dirty;
         let FsmonitorMatcher {
             matcher: fsmonitor_matcher,
             watchman_clock,
-        } = self
-            .make_fsmonitor_matcher(&self.fsmonitor_settings)
-            .await?;
+        } = if let Some(changed_files) = changed_files {
+            fsmonitor_clock_needs_save = false;
+            is_dirty = false;
+            let repo_paths = changed_files
+                .iter()
+                .filter_map(|path| RepoPathBuf::from_relative_path(path).ok())
+                .collect::<Vec<_>>();
+            FsmonitorMatcher {
+                matcher: Some(Box::new(FilesMatcher::new(repo_paths))),
+                watchman_clock: None,
+            }
+        } else {
+            fsmonitor_clock_needs_save = self.fsmonitor_settings != FsmonitorSettings::None;
+            is_dirty = fsmonitor_clock_needs_save;
+            self.make_fsmonitor_matcher(&self.fsmonitor_settings)
+                .await?
+        };
         let fsmonitor_matcher = match fsmonitor_matcher.as_ref() {
             None => &EverythingMatcher,
             Some(fsmonitor_matcher) => fsmonitor_matcher.as_ref(),

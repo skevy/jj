@@ -230,6 +230,12 @@ pub struct SnapshotOptions<'a> {
     /// (depending on implementation)
     /// return `SnapshotError::NewFileTooLarge`.
     pub max_new_file_size: u64,
+    /// Pre-computed list of changed files, provided by the caller. When set,
+    /// this overrides the configured fsmonitor backend for this snapshot,
+    /// allowing embedders to supply their own file-change detection (e.g.
+    /// from an external watchman subscription) without jj interacting with
+    /// the fsmonitor directly.
+    pub changed_files: Option<Vec<std::path::PathBuf>>,
 }
 
 /// A callback for getting progress updates.
