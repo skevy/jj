@@ -14,6 +14,8 @@
 
 use std::fs;
 #[cfg(feature = "git")]
+use std::path::Path;
+#[cfg(feature = "git")]
 use std::path::PathBuf;
 #[cfg(feature = "git")]
 use std::process::Command;
@@ -102,6 +104,10 @@ pub struct WorkspaceAddArgs {
     #[arg(long)]
     no_colocate: bool,
 
+    #[cfg(feature = "git")]
+    #[arg(long, hide = true, conflicts_with = "no_colocate")]
+    existing_git_worktree: bool,
+
     #[arg(long, hide = true)]
     assume_files_present: bool,
 }
@@ -135,6 +141,12 @@ pub async fn cmd_workspace_add(
             "--assume-files-present requires --sparse-patterns empty",
         ));
     }
+    #[cfg(feature = "git")]
+    if args.existing_git_worktree && !args.assume_files_present {
+        return Err(user_error(
+            "--existing-git-worktree requires --assume-files-present",
+        ));
+    }
 
     let repo = old_workspace_command.repo();
     if repo.view().get_wc_commit_id(&workspace_name).is_some() {
@@ -148,7 +160,7 @@ pub async fn cmd_workspace_add(
     // --no-colocate) The guard will clean up the worktree if we return early
     // due to an error
     #[cfg(feature = "git")]
-    let worktree_guard = {
+    let (worktree_guard, destination_is_colocated) = {
         // Check if parent workspace is colocated
         let parent_is_colocated =
             is_colocated_git_workspace(old_workspace_command.workspace(), repo.as_ref());
@@ -156,7 +168,9 @@ pub async fn cmd_workspace_add(
         // Determine if colocation is requested:
         // - --no-colocate: never colocate (override auto-detect)
         // - (no flag): colocate if parent is colocated (auto-detect)
-        let colocate_requested = if args.no_colocate {
+        let colocate_requested = if args.existing_git_worktree {
+            true
+        } else if args.no_colocate {
             false
         } else {
             // Auto-detect from parent
@@ -166,60 +180,73 @@ pub async fn cmd_workspace_add(
         if colocate_requested {
             let git_backend = git::get_git_backend(repo.store())?;
             let git_repo = git_backend.git_repo();
-            // git -C works from any directory within the repo, so workdir() is fine.
-            // For bare repos backing worktrees, use common_dir() instead.
-            let git_dir = git_repo.workdir().unwrap_or(git_repo.common_dir());
+            if args.existing_git_worktree {
+                if !parent_is_colocated {
+                    return Err(user_error(
+                        "--existing-git-worktree requires a colocated source workspace",
+                    ));
+                }
+                validate_existing_git_worktree(git_repo.common_dir(), &destination_path)?;
+                (None, true)
+            } else {
+                // git -C works from any directory within the repo, so workdir() is fine.
+                // For bare repos backing worktrees, use common_dir() instead.
+                let git_dir = git_repo.workdir().unwrap_or(git_repo.common_dir());
 
-            // Prune any dangling git worktree registrations. Without this, a prior
-            // `workspace add` + `workspace forget` + manual `rm -rf` sequence leaves a
-            // stale registration that makes `git worktree add` fail with "missing but
-            // already registered worktree". `prune` only removes registrations whose
-            // directories no longer exist, so it's safe to run unconditionally.
-            let prune_output = Command::new("git")
-                .arg("-C")
-                .arg(git_dir)
-                .arg("worktree")
-                .arg("prune")
-                .env("LC_ALL", "C")
-                .output()
-                .map_err(|e| user_error(format!("Failed to run git worktree prune: {e}")))?;
-            if !prune_output.status.success() {
-                return Err(user_error(format!(
-                    "Failed to prune Git worktrees: {}",
-                    String::from_utf8_lossy(&prune_output.stderr).trim()
-                )));
+                // Prune any dangling git worktree registrations. Without this, a prior
+                // `workspace add` + `workspace forget` + manual `rm -rf` sequence leaves a
+                // stale registration that makes `git worktree add` fail with "missing but
+                // already registered worktree". `prune` only removes registrations whose
+                // directories no longer exist, so it's safe to run unconditionally.
+                let prune_output = Command::new("git")
+                    .arg("-C")
+                    .arg(git_dir)
+                    .arg("worktree")
+                    .arg("prune")
+                    .env("LC_ALL", "C")
+                    .output()
+                    .map_err(|e| user_error(format!("Failed to run git worktree prune: {e}")))?;
+                if !prune_output.status.success() {
+                    return Err(user_error(format!(
+                        "Failed to prune Git worktrees: {}",
+                        String::from_utf8_lossy(&prune_output.stderr).trim()
+                    )));
+                }
+
+                // Create git worktree with an orphan branch. This avoids checking out
+                // files (jj will do its own checkout) and works even in empty repos.
+                // Use a unique branch name per workspace to avoid conflicts between worktrees.
+                // TODO: Use gix API when worktree creation is implemented.
+                // See: https://github.com/Byron/gitoxide/blob/main/crate-status.md
+                let branch_name = format!("jj-worktree-{}", workspace_name.as_str());
+                let output = Command::new("git")
+                    .arg("-C")
+                    .arg(git_dir)
+                    .arg("worktree")
+                    .arg("add")
+                    .arg("--orphan")
+                    .arg("-B")
+                    .arg(&branch_name)
+                    .arg(&destination_path)
+                    .env("LC_ALL", "C") // Disable translation so we can parse output
+                    .output()
+                    .map_err(|e| user_error(format!("Failed to run git worktree add: {e}")))?;
+
+                if !output.status.success() {
+                    return Err(user_error(format!(
+                        "Failed to create Git worktree: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )));
+                }
+
+                (
+                    Some(GitWorktreeGuard::new(
+                        git_dir.to_path_buf(),
+                        destination_path.clone(),
+                    )),
+                    true,
+                )
             }
-
-            // Create git worktree with an orphan branch. This avoids checking out
-            // files (jj will do its own checkout) and works even in empty repos.
-            // Use a unique branch name per workspace to avoid conflicts between worktrees.
-            // TODO: Use gix API when worktree creation is implemented.
-            // See: https://github.com/Byron/gitoxide/blob/main/crate-status.md
-            let branch_name = format!("jj-worktree-{}", workspace_name.as_str());
-            let output = Command::new("git")
-                .arg("-C")
-                .arg(git_dir)
-                .arg("worktree")
-                .arg("add")
-                .arg("--orphan")
-                .arg("-B")
-                .arg(&branch_name)
-                .arg(&destination_path)
-                .env("LC_ALL", "C") // Disable translation so we can parse output
-                .output()
-                .map_err(|e| user_error(format!("Failed to run git worktree add: {e}")))?;
-
-            if !output.status.success() {
-                return Err(user_error(format!(
-                    "Failed to create Git worktree: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
-                )));
-            }
-
-            Some(GitWorktreeGuard::new(
-                git_dir.to_path_buf(),
-                destination_path.clone(),
-            ))
         } else {
             if !destination_path.exists() {
                 fs::create_dir(&destination_path).context(&destination_path)?;
@@ -228,7 +255,7 @@ pub async fn cmd_workspace_add(
                     "Destination path exists and is not an empty directory",
                 ));
             }
-            None
+            (None, false)
         }
     };
 
@@ -259,7 +286,7 @@ pub async fn cmd_workspace_add(
     // Add .gitignore to .jj directory to prevent git from tracking jj files.
     // Do this before printing success message so user sees accurate state.
     #[cfg(feature = "git")]
-    if worktree_guard.is_some() {
+    if destination_is_colocated {
         let gitignore_path = destination_path.join(".jj").join(".gitignore");
         fs::write(&gitignore_path, "*\n").context(&gitignore_path)?;
     }
@@ -368,6 +395,55 @@ pub async fn cmd_workspace_add(
     #[cfg(feature = "git")]
     if let Some(guard) = worktree_guard {
         guard.defuse();
+    }
+    Ok(())
+}
+
+#[cfg(feature = "git")]
+fn validate_existing_git_worktree(
+    expected_common_dir: &Path,
+    destination_path: &Path,
+) -> Result<(), CommandError> {
+    if !destination_path.is_dir() {
+        return Err(user_error(format!(
+            "Existing Git worktree does not exist: {}",
+            destination_path.display()
+        )));
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(destination_path)
+        .arg("rev-parse")
+        .arg("--path-format=absolute")
+        .arg("--git-common-dir")
+        .env("LC_ALL", "C")
+        .output()
+        .map_err(|error| user_error(format!("Failed to inspect existing Git worktree: {error}")))?;
+    if !output.status.success() {
+        return Err(user_error(format!(
+            "Failed to inspect existing Git worktree: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+
+    let actual_common_dir = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    let actual_common_dir = dunce::canonicalize(&actual_common_dir).map_err(|error| {
+        user_error(format!(
+            "Failed to resolve existing Git worktree common directory: {error}"
+        ))
+    })?;
+    let expected_common_dir = dunce::canonicalize(expected_common_dir).map_err(|error| {
+        user_error(format!(
+            "Failed to resolve source Git common directory: {error}"
+        ))
+    })?;
+    if actual_common_dir != expected_common_dir {
+        return Err(user_error(format!(
+            "Existing Git worktree belongs to {}, expected {}",
+            actual_common_dir.display(),
+            expected_common_dir.display()
+        )));
     }
     Ok(())
 }
