@@ -954,6 +954,70 @@ fn file_state(metadata: &Metadata) -> Result<Option<FileState>, MtimeOutOfRange>
     }
 }
 
+fn assumed_file_state(
+    working_copy_path: &Path,
+    symlink_support: bool,
+    path: RepoPathBuf,
+    value: MergedTreeValue,
+) -> Result<(RepoPathBuf, FileState), ResetError> {
+    let value = match value.into_resolved() {
+        Ok(Some(value)) => value,
+        _ => {
+            let message = format!("Cannot assume files are present for unresolved path {path:?}");
+            return Err(ResetError::Other {
+                message: message.clone(),
+                err: io::Error::other(message).into(),
+            });
+        }
+    };
+
+    if matches!(value, TreeValue::GitSubmodule(_)) {
+        return Ok((path, FileState::for_gitsubmodule()));
+    }
+
+    let disk_path = path
+        .to_fs_path(working_copy_path)
+        .map_err(|err| ResetError::Other {
+            message: format!("Failed to resolve working-copy path {path:?}"),
+            err: err.into(),
+        })?;
+    let metadata = disk_path
+        .symlink_metadata()
+        .map_err(|err| ResetError::Other {
+            message: format!("Failed to stat assumed working-copy file {disk_path:?}"),
+            err: err.into(),
+        })?;
+    let state = file_state(&metadata)
+        .map_err(|err| ResetError::Other {
+            message: format!("Failed to read metadata for assumed file {disk_path:?}"),
+            err: err.into(),
+        })?
+        .ok_or_else(|| {
+            let message = format!("Assumed working-copy path is not a file: {disk_path:?}");
+            ResetError::Other {
+                message: message.clone(),
+                err: io::Error::other(message).into(),
+            }
+        })?;
+
+    let expected_type_matches = match value {
+        TreeValue::File { .. } => matches!(state.file_type, FileType::Normal { .. }),
+        TreeValue::Symlink(_) if symlink_support => state.file_type == FileType::Symlink,
+        TreeValue::Symlink(_) => matches!(state.file_type, FileType::Normal { .. }),
+        TreeValue::GitSubmodule(_) => unreachable!(),
+        TreeValue::Tree(_) => false,
+    };
+    if !expected_type_matches {
+        let message = format!("Assumed working-copy path has the wrong file type: {disk_path:?}");
+        return Err(ResetError::Other {
+            message: message.clone(),
+            err: io::Error::other(message).into(),
+        });
+    }
+
+    Ok((path, state))
+}
+
 struct FsmonitorMatcher {
     matcher: Option<Box<dyn Matcher>>,
     watchman_clock: Option<crate::protos::local_working_copy::WatchmanClock>,
@@ -1225,6 +1289,33 @@ impl TreeState {
                 .map_err(|err| TreeStateError::Fsmonitor(Box::new(err)))?;
             fsmonitor
                 .query_changed_files(previous_clock)
+                .await
+                .map_err(|err| TreeStateError::Fsmonitor(Box::new(err)))
+        };
+
+        match tokio::runtime::Handle::try_current() {
+            Ok(_handle) => tokio_fn().await,
+            Err(_) => {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|err| TreeStateError::Fsmonitor(Box::new(err)))?;
+                runtime.block_on(tokio_fn())
+            }
+        }
+    }
+
+    #[cfg(feature = "watchman")]
+    async fn current_watchman_clock(
+        &self,
+        config: &WatchmanConfig,
+    ) -> Result<watchman::Clock, TreeStateError> {
+        let tokio_fn = async || {
+            let fsmonitor = watchman::Fsmonitor::init(&self.working_copy_path, config)
+                .await
+                .map_err(|err| TreeStateError::Fsmonitor(Box::new(err)))?;
+            fsmonitor
+                .current_clock()
                 .await
                 .map_err(|err| TreeStateError::Fsmonitor(Box::new(err)))
         };
@@ -2516,6 +2607,47 @@ impl TreeState {
         self.tree = self.store.empty_merged_tree();
         self.reset(new_tree).await
     }
+
+    pub async fn assume_files_present(
+        &mut self,
+        sparse_patterns: Vec<RepoPathBuf>,
+    ) -> Result<(), ResetError> {
+        #[cfg(feature = "watchman")]
+        let watchman_clock = match &self.fsmonitor_settings {
+            FsmonitorSettings::Watchman(config) => Some(
+                self.current_watchman_clock(config)
+                    .await
+                    .map_err(|err| ResetError::Other {
+                        message: "Failed to read the current Watchman clock".to_string(),
+                        err: Box::new(err),
+                    })?
+                    .into(),
+            ),
+            _ => None,
+        };
+        #[cfg(not(feature = "watchman"))]
+        let watchman_clock = None;
+
+        let matcher = PrefixMatcher::new(&sparse_patterns);
+        let entries = self
+            .tree
+            .entries_matching(&matcher)
+            .map(|(path, value)| value.map(|value| (path, value)))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut file_states = entries
+            .into_par_iter()
+            .map(|(path, value)| {
+                assumed_file_state(&self.working_copy_path, self.symlink_support, path, value)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        file_states.sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
+
+        self.file_states = FileStatesMap::new();
+        self.file_states.merge_in(file_states, &HashSet::new());
+        self.sparse_patterns = sparse_patterns;
+        self.watchman_clock = watchman_clock;
+        Ok(())
+    }
 }
 
 fn checkout_error_for_stat_error(err: io::Error, path: &Path) -> CheckoutError {
@@ -2923,14 +3055,14 @@ impl LockedWorkingCopy for LockedLocalWorkingCopy {
 }
 
 impl LockedLocalWorkingCopy {
-    /// Updates sparse patterns without materializing or removing working-copy files.
-    ///
-    /// The caller must ensure the files on disk already match the current tree.
-    pub fn set_sparse_patterns_without_checkout(
+    pub async fn assume_files_present(
         &mut self,
         sparse_patterns: Vec<RepoPathBuf>,
-    ) -> Result<(), WorkingCopyStateError> {
-        self.wc.tree_state_mut()?.sparse_patterns = sparse_patterns;
+    ) -> Result<(), ResetError> {
+        self.wc
+            .tree_state_mut()?
+            .assume_files_present(sparse_patterns)
+            .await?;
         self.tree_state_dirty = true;
         Ok(())
     }

@@ -25,10 +25,8 @@ use jj_lib::file_util;
 use jj_lib::file_util::IoResultExt as _;
 #[cfg(feature = "git")]
 use jj_lib::git;
-use jj_lib::local_working_copy::LockedLocalWorkingCopy;
 use jj_lib::ref_name::WorkspaceNameBuf;
 use jj_lib::repo::Repo as _;
-use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::rewrite::merge_commit_trees;
 use jj_lib::workspace::Workspace;
 use tracing::instrument;
@@ -365,21 +363,6 @@ pub async fn cmd_workspace_add(
         ),
     )
     .await?;
-
-    if args.assume_files_present {
-        let (mut locked_ws, _wc_commit) =
-            new_workspace_command.start_working_copy_mutation().await?;
-        let Some(locked_local_wc): Option<&mut LockedLocalWorkingCopy> =
-            locked_ws.locked_wc().downcast_mut()
-        else {
-            return Err(user_error(
-                "--assume-files-present requires a standard local-disk working copy",
-            ));
-        };
-        locked_local_wc.set_sparse_patterns_without_checkout(vec![RepoPathBuf::root()])?;
-        let operation_id = locked_ws.locked_wc().old_operation_id().clone();
-        locked_ws.finish(operation_id).await?;
-    }
 
     // All operations succeeded - don't clean up the worktree
     #[cfg(feature = "git")]

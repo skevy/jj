@@ -96,6 +96,7 @@ pub mod watchman {
     use watchman_client::prelude::NameOnly;
     use watchman_client::prelude::QueryRequestCommon;
     use watchman_client::prelude::QueryResult;
+    use watchman_client::prelude::SyncTimeout;
     use watchman_client::prelude::TriggerRequest;
 
     /// Represents an instance in time from the perspective of the filesystem
@@ -260,6 +261,16 @@ pub mod watchman {
                     .collect_vec();
                 Ok((clock, Some(paths)))
             }
+        }
+
+        /// Return a synchronized clock without querying for changed files.
+        pub async fn current_clock(&self) -> Result<Clock, Error> {
+            let clock = self
+                .client
+                .clock(&self.resolved_root, SyncTimeout::Default)
+                .await
+                .map_err(Error::WatchmanQueryError)?;
+            Ok(Clock(InnerClock::Spec(clock)))
         }
 
         /// Return whether or not a trigger has been registered already.
