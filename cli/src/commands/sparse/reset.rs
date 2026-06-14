@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use jj_lib::git;
 use jj_lib::local_working_copy::LockedLocalWorkingCopy;
+use jj_lib::repo::Repo as _;
 use jj_lib::repo_path::RepoPathBuf;
 use tracing::instrument;
 
@@ -28,6 +30,8 @@ use crate::ui::Ui;
 pub struct SparseResetArgs {
     #[arg(long, hide = true)]
     assume_files_present: bool,
+    #[arg(long, hide = true, requires = "assume_files_present")]
+    watchman_clock: Option<String>,
 }
 
 #[instrument(skip_all)]
@@ -38,6 +42,11 @@ pub async fn cmd_sparse_reset(
 ) -> Result<(), CommandError> {
     if args.assume_files_present {
         let mut workspace_command = command.workspace_helper_no_snapshot(ui).await?;
+        let git_index = git::get_git_repo(workspace_command.repo().store())?
+            .index_or_empty()
+            .map_err(|err| {
+                internal_error_with_message("Failed to read the colocated Git index", err)
+            })?;
         let (mut locked_ws, _wc_commit) = workspace_command.start_working_copy_mutation().await?;
         let Some(locked_local_wc): Option<&mut LockedLocalWorkingCopy> =
             locked_ws.locked_wc().downcast_mut()
@@ -47,7 +56,11 @@ pub async fn cmd_sparse_reset(
             ));
         };
         locked_local_wc
-            .assume_files_present(vec![RepoPathBuf::root()])
+            .assume_files_present(
+                vec![RepoPathBuf::root()],
+                &git_index,
+                args.watchman_clock.as_deref(),
+            )
             .await
             .map_err(|err| {
                 internal_error_with_message("Failed to record the existing working-copy files", err)

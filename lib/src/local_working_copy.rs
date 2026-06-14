@@ -42,6 +42,7 @@ use std::sync::mpsc::channel;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
+use bstr::ByteSlice as _;
 use either::Either;
 use futures::AsyncRead;
 use futures::AsyncReadExt as _;
@@ -954,68 +955,42 @@ fn file_state(metadata: &Metadata) -> Result<Option<FileState>, MtimeOutOfRange>
     }
 }
 
-fn assumed_file_state(
-    working_copy_path: &Path,
-    symlink_support: bool,
-    path: RepoPathBuf,
-    value: MergedTreeValue,
-) -> Result<(RepoPathBuf, FileState), ResetError> {
-    let value = match value.into_resolved() {
-        Ok(Some(value)) => value,
-        _ => {
-            let message = format!("Cannot assume files are present for unresolved path {path:?}");
-            return Err(ResetError::Other {
-                message: message.clone(),
-                err: io::Error::other(message).into(),
-            });
-        }
-    };
-
-    if matches!(value, TreeValue::GitSubmodule(_)) {
-        return Ok((path, FileState::for_gitsubmodule()));
-    }
-
-    let disk_path = path
-        .to_fs_path(working_copy_path)
-        .map_err(|err| ResetError::Other {
-            message: format!("Failed to resolve working-copy path {path:?}"),
-            err: err.into(),
-        })?;
-    let metadata = disk_path
-        .symlink_metadata()
-        .map_err(|err| ResetError::Other {
-            message: format!("Failed to stat assumed working-copy file {disk_path:?}"),
-            err: err.into(),
-        })?;
-    let state = file_state(&metadata)
-        .map_err(|err| ResetError::Other {
-            message: format!("Failed to read metadata for assumed file {disk_path:?}"),
-            err: err.into(),
-        })?
+fn file_state_from_git_index_entry(entry: &gix::index::Entry) -> Result<FileState, ResetError> {
+    let mtime = i64::from(entry.stat.mtime.secs)
+        .checked_mul(1_000)
+        .and_then(|millis| millis.checked_add(i64::from(entry.stat.mtime.nsecs / 1_000_000)))
         .ok_or_else(|| {
-            let message = format!("Assumed working-copy path is not a file: {disk_path:?}");
+            let message = "Git index mtime is out of range".to_string();
             ResetError::Other {
                 message: message.clone(),
                 err: io::Error::other(message).into(),
             }
         })?;
-
-    let expected_type_matches = match value {
-        TreeValue::File { .. } => matches!(state.file_type, FileType::Normal { .. }),
-        TreeValue::Symlink(_) if symlink_support => state.file_type == FileType::Symlink,
-        TreeValue::Symlink(_) => matches!(state.file_type, FileType::Normal { .. }),
-        TreeValue::GitSubmodule(_) => unreachable!(),
-        TreeValue::Tree(_) => false,
-    };
-    if !expected_type_matches {
-        let message = format!("Assumed working-copy path has the wrong file type: {disk_path:?}");
+    let file_type = if entry.mode == gix::index::entry::Mode::FILE {
+        FileType::Normal {
+            exec_bit: ExecBit(false),
+        }
+    } else if entry.mode == gix::index::entry::Mode::FILE_EXECUTABLE {
+        FileType::Normal {
+            exec_bit: ExecBit(true),
+        }
+    } else if entry.mode == gix::index::entry::Mode::SYMLINK {
+        FileType::Symlink
+    } else if entry.mode == gix::index::entry::Mode::COMMIT {
+        return Ok(FileState::for_gitsubmodule());
+    } else {
+        let message = format!("Unsupported Git index mode {:?}", entry.mode);
         return Err(ResetError::Other {
             message: message.clone(),
             err: io::Error::other(message).into(),
         });
-    }
-
-    Ok((path, state))
+    };
+    Ok(FileState {
+        file_type,
+        mtime: MillisSinceEpoch(mtime),
+        size: u64::from(entry.stat.size),
+        materialized_conflict_data: None,
+    })
 }
 
 struct FsmonitorMatcher {
@@ -1273,6 +1248,13 @@ impl TreeState {
 
     fn reset_watchman(&mut self) {
         self.watchman_clock.take();
+    }
+
+    fn set_watchman_clock(&mut self, clock: String) {
+        use crate::protos::local_working_copy::watchman_clock;
+        self.watchman_clock = Some(crate::protos::local_working_copy::WatchmanClock {
+            watchman_clock: Some(watchman_clock::WatchmanClock::StringClock(clock)),
+        });
     }
 
     #[cfg(feature = "watchman")]
@@ -2611,36 +2593,62 @@ impl TreeState {
     pub async fn assume_files_present(
         &mut self,
         sparse_patterns: Vec<RepoPathBuf>,
+        git_index: &gix::index::State,
+        watchman_clock: Option<&str>,
     ) -> Result<(), ResetError> {
         #[cfg(feature = "watchman")]
-        let watchman_clock = match &self.fsmonitor_settings {
-            FsmonitorSettings::Watchman(config) => Some(
-                self.current_watchman_clock(config)
-                    .await
-                    .map_err(|err| ResetError::Other {
-                        message: "Failed to read the current Watchman clock".to_string(),
-                        err: Box::new(err),
-                    })?
-                    .into(),
-            ),
-            _ => None,
+        let watchman_clock = match watchman_clock {
+            Some(clock) => {
+                self.set_watchman_clock(clock.to_owned());
+                self.watchman_clock.clone()
+            }
+            None => match &self.fsmonitor_settings {
+                FsmonitorSettings::Watchman(config) => Some(
+                    self.current_watchman_clock(config)
+                        .await
+                        .map_err(|err| ResetError::Other {
+                            message: "Failed to read the current Watchman clock".to_string(),
+                            err: Box::new(err),
+                        })?
+                        .into(),
+                ),
+                _ => None,
+            },
         };
         #[cfg(not(feature = "watchman"))]
-        let watchman_clock = None;
+        let watchman_clock = watchman_clock.map(|clock| {
+            use crate::protos::local_working_copy::watchman_clock;
+            crate::protos::local_working_copy::WatchmanClock {
+                watchman_clock: Some(watchman_clock::WatchmanClock::StringClock(clock.to_owned())),
+            }
+        });
 
         let matcher = PrefixMatcher::new(&sparse_patterns);
-        let entries = self
-            .tree
-            .entries_matching(&matcher)
-            .map(|(path, value)| value.map(|value| (path, value)))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut file_states = entries
-            .into_par_iter()
-            .map(|(path, value)| {
-                assumed_file_state(&self.working_copy_path, self.symlink_support, path, value)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        file_states.sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
+        let mut file_states = Vec::with_capacity(git_index.entries().len());
+        for entry in git_index.entries() {
+            if entry.stage() != gix::index::entry::Stage::Unconflicted {
+                let message = "Cannot seed JJ file state from a conflicted Git index".to_string();
+                return Err(ResetError::Other {
+                    message: message.clone(),
+                    err: io::Error::other(message).into(),
+                });
+            }
+            let path = entry
+                .path(git_index)
+                .to_str()
+                .map_err(|err| ResetError::Other {
+                    message: "Git index path is not valid UTF-8".to_string(),
+                    err: err.into(),
+                })?;
+            let path =
+                RepoPathBuf::from_internal_string(path).map_err(|err| ResetError::Other {
+                    message: "Git index path is not a valid repository path".to_string(),
+                    err: err.into(),
+                })?;
+            if matcher.matches(&path) {
+                file_states.push((path, file_state_from_git_index_entry(entry)?));
+            }
+        }
 
         self.file_states = FileStatesMap::new();
         self.file_states.merge_in(file_states, &HashSet::new());
@@ -3058,11 +3066,19 @@ impl LockedLocalWorkingCopy {
     pub async fn assume_files_present(
         &mut self,
         sparse_patterns: Vec<RepoPathBuf>,
+        git_index: &gix::index::State,
+        watchman_clock: Option<&str>,
     ) -> Result<(), ResetError> {
         self.wc
             .tree_state_mut()?
-            .assume_files_present(sparse_patterns)
+            .assume_files_present(sparse_patterns, git_index, watchman_clock)
             .await?;
+        self.tree_state_dirty = true;
+        Ok(())
+    }
+
+    pub fn set_watchman_clock(&mut self, clock: String) -> Result<(), SnapshotError> {
+        self.wc.tree_state_mut()?.set_watchman_clock(clock);
         self.tree_state_dirty = true;
         Ok(())
     }
