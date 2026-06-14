@@ -31,6 +31,10 @@ name = "jj"
 path = "src/main.rs"
 
 [[bin]]
+name = "jj-worktree-overlay"
+path = "src/bin/jj-worktree-overlay.rs"
+
+[[bin]]
 name = "fake-bisector"
 path = "testing/fake-bisector.rs"
 required-features = ["test-fakes"]
