@@ -25,8 +25,10 @@ use jj_lib::file_util;
 use jj_lib::file_util::IoResultExt as _;
 #[cfg(feature = "git")]
 use jj_lib::git;
+use jj_lib::local_working_copy::LockedLocalWorkingCopy;
 use jj_lib::ref_name::WorkspaceNameBuf;
 use jj_lib::repo::Repo as _;
+use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::rewrite::merge_commit_trees;
 use jj_lib::workspace::Workspace;
 use tracing::instrument;
@@ -101,6 +103,9 @@ pub struct WorkspaceAddArgs {
     #[cfg(feature = "git")]
     #[arg(long)]
     no_colocate: bool,
+
+    #[arg(long, hide = true)]
+    assume_files_present: bool,
 }
 
 #[instrument(skip_all)]
@@ -109,7 +114,11 @@ pub async fn cmd_workspace_add(
     command: &CommandHelper,
     args: &WorkspaceAddArgs,
 ) -> Result<(), CommandError> {
-    let old_workspace_command = command.workspace_helper(ui).await?;
+    let old_workspace_command = if args.assume_files_present {
+        command.workspace_helper_no_snapshot(ui).await?
+    } else {
+        command.workspace_helper(ui).await?
+    };
     let destination_path = command.cwd().join(&args.destination);
     let workspace_name = if let Some(name) = &args.name {
         name.to_owned()
@@ -122,6 +131,11 @@ pub async fn cmd_workspace_add(
     };
     if workspace_name.as_str().is_empty() {
         return Err(user_error("New workspace name cannot be empty"));
+    }
+    if args.assume_files_present && args.sparse_patterns != SparseInheritance::Empty {
+        return Err(user_error(
+            "--assume-files-present requires --sparse-patterns empty",
+        ));
     }
 
     let repo = old_workspace_command.repo();
@@ -351,6 +365,21 @@ pub async fn cmd_workspace_add(
         ),
     )
     .await?;
+
+    if args.assume_files_present {
+        let (mut locked_ws, _wc_commit) =
+            new_workspace_command.start_working_copy_mutation().await?;
+        let Some(locked_local_wc): Option<&mut LockedLocalWorkingCopy> =
+            locked_ws.locked_wc().downcast_mut()
+        else {
+            return Err(user_error(
+                "--assume-files-present requires a standard local-disk working copy",
+            ));
+        };
+        locked_local_wc.set_sparse_patterns_without_checkout(vec![RepoPathBuf::root()])?;
+        let operation_id = locked_ws.locked_wc().old_operation_id().clone();
+        locked_ws.finish(operation_id).await?;
+    }
 
     // All operations succeeded - don't clean up the worktree
     #[cfg(feature = "git")]

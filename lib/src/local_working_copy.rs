@@ -2923,6 +2923,18 @@ impl LockedWorkingCopy for LockedLocalWorkingCopy {
 }
 
 impl LockedLocalWorkingCopy {
+    /// Updates sparse patterns without materializing or removing working-copy files.
+    ///
+    /// The caller must ensure the files on disk already match the current tree.
+    pub fn set_sparse_patterns_without_checkout(
+        &mut self,
+        sparse_patterns: Vec<RepoPathBuf>,
+    ) -> Result<(), WorkingCopyStateError> {
+        self.wc.tree_state_mut()?.sparse_patterns = sparse_patterns;
+        self.tree_state_dirty = true;
+        Ok(())
+    }
+
     pub fn reset_watchman(&mut self) -> Result<(), SnapshotError> {
         self.wc.tree_state_mut()?.reset_watchman();
         self.tree_state_dirty = true;
