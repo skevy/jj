@@ -8,9 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://docs.jj-vcs.dev/latest/worktree-overlay/">
+        <link rel="canonical" href="https://docs.jj-vcs.dev/latest/conflicts/">
       
       
+        <link rel="prev" href="../bookmarks/">
+      
+      
+        <link rel="next" href="../operation-log/">
       
       
       <link rel="icon" href="../images/favicon-96x96.png">
@@ -18,7 +22,7 @@
     
     
       
-        <title>Worktree Overlay support - Jujutsu docs</title>
+        <title>Conflicts - Jujutsu docs</title>
       
     
     
@@ -70,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#worktree-overlay-support" class="md-skip">
+        <a href="#first-class-conflicts" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Worktree Overlay support
+              Conflicts
             
           </span>
         </div>
@@ -533,18 +537,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
@@ -560,7 +566,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             Concepts
@@ -617,10 +623,32 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../conflicts/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Conflicts
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -631,6 +659,80 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#introduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Introduction
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advantages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Advantages
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conflict-markers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conflict markers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#alternative-conflict-marker-styles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Alternative conflict marker styles
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#long-conflict-markers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Long conflict markers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conflicts-with-missing-terminating-newline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conflicts with missing terminating newline
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1812,45 +1914,54 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#install" class="md-nav__link">
+  <a href="#introduction" class="md-nav__link">
     <span class="md-ellipsis">
-      Install
+      Introduction
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#adopt-an-existing-git-worktree" class="md-nav__link">
+  <a href="#advantages" class="md-nav__link">
     <span class="md-ellipsis">
-      Adopt an existing Git worktree
+      Advantages
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#seed-working-copy-state" class="md-nav__link">
+  <a href="#conflict-markers" class="md-nav__link">
     <span class="md-ellipsis">
-      Seed working-copy state
+      Conflict markers
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#restore-watchman-state" class="md-nav__link">
+  <a href="#alternative-conflict-marker-styles" class="md-nav__link">
     <span class="md-ellipsis">
-      Restore Watchman state
+      Alternative conflict marker styles
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#external-lifecycle" class="md-nav__link">
+  <a href="#long-conflict-markers" class="md-nav__link">
     <span class="md-ellipsis">
-      External lifecycle
+      Long conflict markers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conflicts-with-missing-terminating-newline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conflicts with missing terminating newline
     </span>
   </a>
   
@@ -1872,7 +1983,7 @@
 
 
   
-    <a href="https://github.com/jj-vcs/jj/edit/main/docs/worktree-overlay.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/jj-vcs/jj/edit/main/docs/conflicts.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75z"/></svg>
     </a>
@@ -1880,67 +1991,191 @@
   
 
 
-<h1 id="worktree-overlay-support">Worktree Overlay support<a class="headerlink" href="#worktree-overlay-support" title="Permanent link">&para;</a></h1>
-<p>This branch contains the Jujutsu primitives needed by an external
-<code>worktree-overlay</code> lifecycle adapter. The adapter itself is user policy and is
-not part of <code>jj-cli</code>.</p>
-<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code>cargo<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--git<span class="w"> </span>https://github.com/skevy/jj<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--branch<span class="w"> </span>worktree-overlay-v0.42.0<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--locked<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--root<span class="w"> </span>~/.local<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--force<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jj-cli
-</code></pre></div>
-<p>This installs <code>jj</code>. A lifecycle adapter can then invoke the hidden commands
-described below.</p>
-<h2 id="adopt-an-existing-git-worktree">Adopt an existing Git worktree<a class="headerlink" href="#adopt-an-existing-git-worktree" title="Permanent link">&para;</a></h2>
-<p><code>jj workspace add --existing-git-worktree</code> registers an existing linked Git
-worktree as a native JJ workspace. It is intended for worktrees that another
-tool has already created and populated.</p>
-<p>The command requires:</p>
+<h1 id="first-class-conflicts">First-class conflicts<a class="headerlink" href="#first-class-conflicts" title="Permanent link">&para;</a></h1>
+<h2 id="introduction">Introduction<a class="headerlink" href="#introduction" title="Permanent link">&para;</a></h2>
+<p>Conflicts happen when Jujutsu can't figure out how to merge different changes
+made to the same file. For instance, this can happen if two people are working
+on the same file and make different changes to the same part of the file, and
+then their commits are merged together with <code>jj new</code> (or one is rebased onto the
+other with <code>jj rebase</code>).</p>
+<p>Unlike most other VCSs, Jujutsu can record conflicted states in commits. For
+example, if you rebase a commit and it results in a conflict, the conflict will
+be recorded in the rebased commit and the rebase operation will succeed. You can
+then resolve the conflict whenever you want. Conflicted states can be further
+rebased, merged, or backed out. Note that what's stored in the commit is a
+logical representation of the conflict, not conflict <em>markers</em>; rebasing a
+conflict doesn't result in a nested conflict markers (see
+<a href="../technical/conflicts/">technical doc</a> for how this works).</p>
+<h2 id="advantages">Advantages<a class="headerlink" href="#advantages" title="Permanent link">&para;</a></h2>
+<p>The deeper understanding of conflicts has many advantages:</p>
 <ul>
-<li>A colocated source workspace.</li>
-<li><code>--assume-files-present</code>.</li>
-<li><code>--sparse-patterns empty</code>.</li>
-<li>A destination whose Git common directory matches the source repository.</li>
+<li>Removes the need for things like
+  <code>git rebase/merge/cherry-pick/etc --continue</code>. Instead, you get a single
+  workflow for resolving conflicts: check out the conflicted commit, resolve
+  conflicts, and amend.</li>
+<li>Enables the "auto-rebase" feature, where descendants of rewritten commits
+  automatically get rewritten. This feature mostly replaces Mercurial's
+  <a href="https://www.mercurial-scm.org/wiki/ChangesetEvolution">Changeset Evolution</a>.</li>
+<li>Lets us define the change in a merge commit as being compared to the merged
+  parents. That way, we can rebase merge commits correctly (unlike both Git and
+  Mercurial). That includes conflict resolutions done in the merge commit,
+  addressing a common use case for
+  <a href="https://git-scm.com/docs/git-rerere">git rerere</a>.
+  Since the changes in a merge commit are displayed and rebased as expected,
+  <a href="https://git-scm.com/docs/gitglossary/2.22.0#Documentation/gitglossary.txt-aiddefevilmergeaevilmerge">evil merges</a>
+  are arguably not as evil anymore.</li>
+<li>Allows you to postpone conflict resolution until you're ready for it. You
+  can easily keep all your work-in-progress commits rebased onto upstream's head
+  if you like.</li>
+<li><a href="https://stackoverflow.com/questions/26370185/how-do-criss-cross-merges-arise-in-git">Criss-cross merges</a>
+  and <a href="https://git-scm.com/docs/git-merge#Documentation/git-merge.txt-octopus">octopus merges</a>
+  become trivial (implementation-wise); some cases that Git can't currently
+  handle, or that would result in nested conflict markers, can be automatically
+  resolved.</li>
+<li>Enables collaborative conflict resolution. (This assumes that you can share
+  the conflicts with others, which you probably shouldn't do if some people
+  interact with your project using Git.)</li>
 </ul>
-<p>The empty sparse pattern prevents workspace initialization from rewriting the
-destination. The command also skips snapshotting the source working copy.</p>
-<p>Example:</p>
-<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>-R<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$source</span><span class="s2">&quot;</span><span class="w"> </span>workspace<span class="w"> </span>add<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--existing-git-worktree<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--assume-files-present<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--sparse-patterns<span class="w"> </span>empty<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--name<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$workspace_name</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--revision<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$commit</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">&quot;</span><span class="nv">$target</span><span class="s2">&quot;</span>
+<p>For information about how conflicts are handled in the working copy, see
+<a href="../working-copy/#conflicts">here</a>.</p>
+<h2 id="conflict-markers">Conflict markers<a class="headerlink" href="#conflict-markers" title="Permanent link">&para;</a></h2>
+<p>Conflicts are "materialized" using <em>conflict markers</em> in various contexts. For
+example, when you run <code>jj new</code> or <code>jj edit</code> on a commit with a conflict, it will
+be materialized in the working copy. Conflicts are also materialized when they
+are part of diff output (e.g. <code>jj show</code> on a commit that introduces or resolves
+a conflict).</p>
+<p>As an example, imagine that you have a file which contains the following text,
+all in lowercase:</p>
+<div class="highlight"><pre><span></span><code>apple
+grape
+orange
 </code></pre></div>
-<h2 id="seed-working-copy-state">Seed working-copy state<a class="headerlink" href="#seed-working-copy-state" title="Permanent link">&para;</a></h2>
-<p>After the external filesystem and Git index are ready, the adapter can expand
-the sparse patterns without checking out files:</p>
-<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>-R<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$target</span><span class="s2">&quot;</span><span class="w"> </span>sparse<span class="w"> </span>reset<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--assume-files-present<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--watchman-clock<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$clock</span><span class="s2">&quot;</span>
+<p>One person replaces the word "grape" with "grapefruit" in commit A, while
+another person changes every line to uppercase in commit B. If you merge the
+changes together with <code>jj new A B</code>, the resulting commit will have a conflict
+since Jujutsu can't figure out how to combine these changes. Therefore, Jujutsu
+will materialize the conflict in the working copy using conflict markers, which
+would look like this:</p>
+<div class="highlight"><pre><span></span><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; conflict 1 of 1
+%%%%%%% diff from: vpxusssl 38d49363 &quot;merge base&quot;
+\\\\\\\        to: rtsqusxu 2768b0b9 &quot;commit A&quot;
+ apple
+-grape
++grapefruit
+ orange
++++++++ ysrnknol 7a20f389 &quot;commit B&quot;
+APPLE
+GRAPE
+ORANGE
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; conflict 1 of 1 ends
 </code></pre></div>
-<p>JJ seeds its file-state table from the colocated Git index. File changes made
-after the mount remain visible and are not overwritten by baseline state.</p>
-<h2 id="restore-watchman-state">Restore Watchman state<a class="headerlink" href="#restore-watchman-state" title="Permanent link">&para;</a></h2>
-<p>An external adapter can set a new Watchman clock after remounting a clean
-working copy:</p>
-<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>-R<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$target</span><span class="s2">&quot;</span><span class="w"> </span>debug<span class="w"> </span>watchman<span class="w"> </span>set-clock<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$clock</span><span class="s2">&quot;</span>
+<p>The markers <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> indicate the start and end of a conflict
+respectively. The marker <code>+++++++</code> indicates the start of a snapshot, while the
+marker <code>%%%%%%%</code> indicates the start of a diff to apply to the snapshot. The
+<code>\\\\\\\</code> marker just allows the label to be split across two lines to make it
+more readable.</p>
+<p>Therefore, to resolve this conflict, you would apply the diff (changing "grape"
+to "grapefruit") to the snapshot (the side with every line in uppercase),
+editing the file to look like this:</p>
+<div class="highlight"><pre><span></span><code>APPLE
+GRAPEFRUIT
+ORANGE
 </code></pre></div>
-<p>For a dirty working copy, it should clear the old clock:</p>
-<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>-R<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$target</span><span class="s2">&quot;</span><span class="w"> </span>debug<span class="w"> </span>watchman<span class="w"> </span>reset-clock
+<p>In practice, conflicts are usually 2-sided, meaning that there's only 2
+conflicting changes being merged together at a time, but Jujutsu supports
+conflicts with arbitrarily many sides, which can happen when merging 3 or more
+commits at once. In that case, you would see a single snapshot section and
+multiple diff sections.</p>
+<p>Compared to just showing the content of each side of the conflict, the main
+benefit of Jujutsu's style of conflict markers is that you don't need to spend
+time manually comparing the sides to spot the differences between them. This is
+especially beneficial for many-sided conflicts, since resolving them just
+requires applying each diff to the snapshot one-by-one.</p>
+<h2 id="alternative-conflict-marker-styles">Alternative conflict marker styles<a class="headerlink" href="#alternative-conflict-marker-styles" title="Permanent link">&para;</a></h2>
+<p>If you prefer to just see the contents of each side of the conflict without the
+diff, Jujutsu also supports a "snapshot" style, which can be enabled by setting
+the <code>ui.conflict-marker-style</code> config option to "snapshot":</p>
+<div class="highlight"><pre><span></span><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; conflict 1 of 1
++++++++ rtsqusxu 2768b0b9 &quot;commit A&quot;
+apple
+grapefruit
+orange
+------- vpxusssl 38d49363 &quot;merge base&quot;
+apple
+grape
+orange
++++++++ ysrnknol 7a20f389 &quot;commit B&quot;
+APPLE
+GRAPE
+ORANGE
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; conflict 1 of 1 ends
 </code></pre></div>
-<p>Clearing the clock forces the next snapshot to scan the working copy rather
-than assume the new watch includes changes made before it started.</p>
-<h2 id="external-lifecycle">External lifecycle<a class="headerlink" href="#external-lifecycle" title="Permanent link">&para;</a></h2>
-<p>The expected consumer creates an ordinary linked Git worktree first, mounts
-its filesystem, and then uses these JJ commands during create, recover, and
-remove events. The consumer owns Watchman process orchestration, Git index
-refresh, workspace naming, retries, and cleanup.</p>
+<p>Some tools expect Git-style conflict markers, so Jujutsu also supports <a href="https://git-scm.com/docs/git-merge#_how_conflicts_are_presented">Git's
+"diff3" style</a>
+conflict markers by setting the <code>ui.conflict-marker-style</code> config option to
+"git":</p>
+<div class="highlight"><pre><span></span><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; rtsqusxu 2768b0b9 &quot;commit A&quot;
+apple
+grapefruit
+orange
+||||||| vpxusssl 38d49363 &quot;merge base&quot;
+apple
+grape
+orange
+=======
+APPLE
+GRAPE
+ORANGE
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; ysrnknol 7a20f389 &quot;commit B&quot;
+</code></pre></div>
+<p>This conflict marker style only supports 2-sided conflicts though, so it falls
+back to the similar "snapshot" conflict markers if there are more than 2 sides
+to the conflict.</p>
+<h2 id="long-conflict-markers">Long conflict markers<a class="headerlink" href="#long-conflict-markers" title="Permanent link">&para;</a></h2>
+<p>Some files may contain lines which could be confused for conflict markers. For
+instance, a line could start with <code>=======</code>, which looks like a Git-style
+conflict marker. To ensure that it's always unambiguous which lines are conflict
+markers and which are just part of the file contents, <code>jj</code> sometimes uses
+conflict markers which are longer than normal:</p>
+<div class="highlight"><pre><span></span><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt; conflict 1 of 1
+%%%%%%%%%%%%%%% diff from: wqvuxsty cb9217d5 &quot;merge base&quot;
+\\\\\\\\\\\\\\\        to: kwntsput 0e15b770 &quot;commit A&quot;
+-Heading
++HEADING
+ =======
++++++++++++++++ mpnwrytz 52020ed6 &quot;commit B&quot;
+New Heading
+===========
+&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt; conflict 1 of 1 ends
+</code></pre></div>
+<h2 id="conflicts-with-missing-terminating-newline">Conflicts with missing terminating newline<a class="headerlink" href="#conflicts-with-missing-terminating-newline" title="Permanent link">&para;</a></h2>
+<p>When materializing conflicts, <code>jj</code> outputs them in a line-based format, with
+each conflict marker line terminated by a newline character (<code>\n</code>). This format
+works well for text files that consist of a series of lines, with each line
+terminated by a newline character as well.</p>
+<p>While most text files follow this convention, some do not. Since conflict
+markers must appear on their own line, when <code>jj</code> encounters a missing
+terminating newline character in a conflict, it still needs to ensure that
+there is a newline before the next conflict marker. To do this, it adds an
+extra newline to each term of the conflict. Then, to compensate for this extra
+newline, it also omits the terminating newline from the "end of conflict"
+marker (<code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>).</p>
+<p>For instance, if a file originally contained <code>grape</code> with no terminating newline
+character, and one person changed <code>grape</code> to <code>grapefruit</code>, while another person
+added the missing newline character to make <code>grape\n</code>, the resulting conflict
+would look like this (<code>␊</code> demonstrates the <code>\n</code> character explicitly; note that
+the last line doesn't have the terminating <code>\n</code> character):</p>
+<div class="highlight"><pre><span></span><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; conflict 1 of 1␊
++++++++ tlwwkqxk d121763d &quot;commit A&quot; (no terminating newline)␊
+grapefruit␊
+%%%%%%% diff from: qwpqssno fe561d93 &quot;merge base&quot; (no terminating newline)␊
+\\\\\\\        to: poxkmrxy c735fe02 &quot;commit B&quot;␊
+ grape␊
++␊
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; conflict 1 of 1 ends
+</code></pre></div>
+<p>Therefore, a resolution of this conflict could be <code>grapefruit\n</code>, with the
+terminating newline character added.</p>
 
 
 
