@@ -1,5 +1,12 @@
 [
   {
+    "version": "worktree-overlay-v0.42.0-6a248719",
+    "title": "worktree-overlay-v0.42.0-6a248719",
+    "aliases": [
+      "latest"
+    ]
+  },
+  {
     "version": "prerelease",
     "title": "prerelease",
     "aliases": []
@@ -7,9 +14,7 @@
   {
     "version": "v0.39.0",
     "title": "v0.39.0",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "v0.38.0",
