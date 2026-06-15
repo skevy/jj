@@ -2494,6 +2494,8 @@ fn test_workspace_add_adopts_existing_git_worktree() {
         .run_jj_in(".", ["git", "init", "--colocate", "repo"])
         .success();
     work_dir.write_file("file", "contents");
+    work_dir.write_file("prefix/file", "nested");
+    work_dir.write_file("prefix-sibling", "sibling");
     work_dir.run_jj(["commit", "-m", "first commit"]).success();
     let commit = work_dir
         .run_jj(["log", "--no-graph", "-T", "commit_id", "-r", "@-"])
@@ -2564,7 +2566,15 @@ fn test_workspace_add_adopts_existing_git_worktree() {
         .run_jj(["sparse", "reset", "--assume-files-present"])
         .success();
 
-    second_work_dir.run_jj(["status"]).success();
+    let status = second_work_dir
+        .run_jj(["--config", "fsmonitor.backend=none", "status"])
+        .success();
+    assert!(
+        status
+            .stdout
+            .normalized()
+            .contains("The working copy has no changes.")
+    );
     let workspace_list = work_dir
         .run_jj(["--ignore-working-copy", "workspace", "list"])
         .success();

@@ -2649,6 +2649,7 @@ impl TreeState {
                 file_states.push((path, file_state_from_git_index_entry(entry)?));
             }
         }
+        file_states.sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
 
         self.file_states = FileStatesMap::new();
         self.file_states.merge_in(file_states, &HashSet::new());
