@@ -42,6 +42,8 @@ use std::sync::mpsc::channel;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
+#[cfg(feature = "git")]
+use bstr::ByteSlice as _;
 use either::Either;
 use futures::AsyncRead;
 use futures::AsyncReadExt as _;
@@ -954,6 +956,45 @@ fn file_state(metadata: &Metadata) -> Result<Option<FileState>, MtimeOutOfRange>
     }
 }
 
+#[cfg(feature = "git")]
+fn file_state_from_git_index_entry(entry: &gix::index::Entry) -> Result<FileState, ResetError> {
+    let mtime = i64::from(entry.stat.mtime.secs)
+        .checked_mul(1_000)
+        .and_then(|millis| millis.checked_add(i64::from(entry.stat.mtime.nsecs / 1_000_000)))
+        .ok_or_else(|| {
+            let message = "Git index mtime is out of range".to_string();
+            ResetError::Other {
+                message: message.clone(),
+                err: io::Error::other(message).into(),
+            }
+        })?;
+    let file_type = if entry.mode == gix::index::entry::Mode::FILE {
+        FileType::Normal {
+            exec_bit: ExecBit(false),
+        }
+    } else if entry.mode == gix::index::entry::Mode::FILE_EXECUTABLE {
+        FileType::Normal {
+            exec_bit: ExecBit(true),
+        }
+    } else if entry.mode == gix::index::entry::Mode::SYMLINK {
+        FileType::Symlink
+    } else if entry.mode == gix::index::entry::Mode::COMMIT {
+        return Ok(FileState::for_gitsubmodule());
+    } else {
+        let message = format!("Unsupported Git index mode {:?}", entry.mode);
+        return Err(ResetError::Other {
+            message: message.clone(),
+            err: io::Error::other(message).into(),
+        });
+    };
+    Ok(FileState {
+        file_type,
+        mtime: MillisSinceEpoch(mtime),
+        size: u64::from(entry.stat.size),
+        materialized_conflict_data: None,
+    })
+}
+
 struct FsmonitorMatcher {
     matcher: Option<Box<dyn Matcher>>,
     watchman_clock: Option<crate::protos::local_working_copy::WatchmanClock>,
@@ -1209,6 +1250,13 @@ impl TreeState {
 
     fn reset_watchman(&mut self) {
         self.watchman_clock.take();
+    }
+
+    fn set_watchman_clock(&mut self, clock: String) {
+        use crate::protos::local_working_copy::watchman_clock;
+        self.watchman_clock = Some(crate::protos::local_working_copy::WatchmanClock {
+            watchman_clock: Some(watchman_clock::WatchmanClock::StringClock(clock)),
+        });
     }
 
     #[cfg(feature = "watchman")]
@@ -2516,6 +2564,47 @@ impl TreeState {
         self.tree = self.store.empty_merged_tree();
         self.reset(new_tree).await
     }
+
+    #[cfg(feature = "git")]
+    pub fn seed_from_git_index(
+        &mut self,
+        git_index: &gix::index::State,
+        watchman_clock: Option<&str>,
+    ) -> Result<(), ResetError> {
+        let mut file_states = Vec::with_capacity(git_index.entries().len());
+        for entry in git_index.entries() {
+            if entry.stage() != gix::index::entry::Stage::Unconflicted {
+                let message = "Cannot seed JJ file state from a conflicted Git index".to_string();
+                return Err(ResetError::Other {
+                    message: message.clone(),
+                    err: io::Error::other(message).into(),
+                });
+            }
+            let path = entry
+                .path(git_index)
+                .to_str()
+                .map_err(|err| ResetError::Other {
+                    message: "Git index path is not valid UTF-8".to_string(),
+                    err: err.into(),
+                })?;
+            let path =
+                RepoPathBuf::from_internal_string(path).map_err(|err| ResetError::Other {
+                    message: "Git index path is not a valid repository path".to_string(),
+                    err: err.into(),
+                })?;
+            file_states.push((path, file_state_from_git_index_entry(entry)?));
+        }
+        file_states.sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
+
+        self.file_states = FileStatesMap::new();
+        self.file_states.merge_in(file_states, &HashSet::new());
+        self.sparse_patterns = vec![RepoPathBuf::root()];
+        self.watchman_clock = None;
+        if let Some(clock) = watchman_clock {
+            self.set_watchman_clock(clock.to_owned());
+        }
+        Ok(())
+    }
 }
 
 fn checkout_error_for_stat_error(err: io::Error, path: &Path) -> CheckoutError {
@@ -2923,6 +3012,19 @@ impl LockedWorkingCopy for LockedLocalWorkingCopy {
 }
 
 impl LockedLocalWorkingCopy {
+    #[cfg(feature = "git")]
+    pub fn seed_from_git_index(
+        &mut self,
+        git_index: &gix::index::State,
+        watchman_clock: Option<&str>,
+    ) -> Result<(), ResetError> {
+        self.wc
+            .tree_state_mut()?
+            .seed_from_git_index(git_index, watchman_clock)?;
+        self.tree_state_dirty = true;
+        Ok(())
+    }
+
     pub fn reset_watchman(&mut self) -> Result<(), SnapshotError> {
         self.wc.tree_state_mut()?.reset_watchman();
         self.tree_state_dirty = true;

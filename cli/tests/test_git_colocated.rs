@@ -2481,6 +2481,115 @@ fn test_workspace_add_colocate_creates_git_worktree() {
 }
 
 #[test]
+fn test_workspace_add_adopts_existing_git_worktree() {
+    if skip_if_git_unavailable() {
+        return;
+    }
+
+    let test_env = TestEnvironment::default();
+    let work_dir = test_env.work_dir("repo");
+    let second_work_dir = test_env.work_dir("second");
+
+    test_env
+        .run_jj_in(".", ["git", "init", "--colocate", "repo"])
+        .success();
+    work_dir.write_file("file", "contents");
+    work_dir.write_file("prefix/file", "nested");
+    work_dir.write_file("prefix-sibling", "sibling");
+    work_dir.run_jj(["commit", "-m", "first commit"]).success();
+    let commit = work_dir
+        .run_jj(["log", "--no-graph", "-T", "commit_id", "-r", "@-"])
+        .success()
+        .stdout
+        .into_raw();
+
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(work_dir.root())
+        .arg("worktree")
+        .arg("add")
+        .arg("--detach")
+        .arg(second_work_dir.root())
+        .arg(&commit)
+        .output()
+        .expect("git command failed");
+    assert!(
+        output.status.success(),
+        "git worktree add failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(second_work_dir.root())
+        .args(["update-index", "--refresh"])
+        .output()
+        .expect("git command failed");
+    assert!(
+        output.status.success(),
+        "git update-index failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    work_dir.write_file("source-only", "dirty");
+    let source_wc_before = work_dir
+        .run_jj([
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-T",
+            "commit_id",
+            "-r",
+            "@",
+        ])
+        .success()
+        .stdout
+        .into_raw();
+
+    work_dir
+        .run_jj([
+            "workspace",
+            "add",
+            "--existing-git-worktree",
+            "--watchman-clock",
+            "c:1:2",
+            "--name",
+            "second",
+            "-r",
+            &commit,
+            "../second",
+        ])
+        .success();
+    let source_wc_after = work_dir
+        .run_jj([
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-T",
+            "commit_id",
+            "-r",
+            "@",
+        ])
+        .success()
+        .stdout
+        .into_raw();
+    assert_eq!(source_wc_after, source_wc_before);
+
+    let status = second_work_dir
+        .run_jj(["--config", "fsmonitor.backend=none", "status"])
+        .success();
+    assert!(
+        status
+            .stdout
+            .normalized()
+            .contains("The working copy has no changes.")
+    );
+    let workspace_list = work_dir
+        .run_jj(["--ignore-working-copy", "workspace", "list"])
+        .success();
+    assert!(workspace_list.stdout.normalized().contains("second:"));
+}
+
+#[test]
 fn test_workspace_add_colocate_git_failure() {
     // This test requires git command
     if skip_if_git_unavailable() {
