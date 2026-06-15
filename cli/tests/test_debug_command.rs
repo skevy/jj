@@ -18,6 +18,40 @@ use regex::Regex;
 use crate::common::CommandOutput;
 use crate::common::TestEnvironment;
 
+#[cfg(feature = "watchman")]
+#[test]
+fn test_debug_watchman_clock_does_not_snapshot() {
+    let test_env = TestEnvironment::default();
+    test_env.run_jj_in(".", ["git", "init", "repo"]).success();
+    let work_dir = test_env.work_dir("repo");
+    work_dir.write_file("file", "initial");
+    work_dir.run_jj(["commit", "-m", "initial"]).success();
+    work_dir.write_file("file", "dirty");
+
+    let get_wc_commit_id = || {
+        work_dir
+            .run_jj([
+                "--ignore-working-copy",
+                "log",
+                "--no-graph",
+                "-Tcommit_id",
+                "-r@",
+            ])
+            .success()
+            .stdout
+    };
+    let commit_id_before = get_wc_commit_id();
+    work_dir
+        .run_jj(["debug", "watchman", "set-clock", "c:1:2"])
+        .success();
+    assert_eq!(get_wc_commit_id(), commit_id_before);
+
+    work_dir
+        .run_jj(["debug", "watchman", "reset-clock"])
+        .success();
+    assert_eq!(get_wc_commit_id(), commit_id_before);
+}
+
 #[test]
 fn test_debug_fileset() {
     let test_env = TestEnvironment::default();

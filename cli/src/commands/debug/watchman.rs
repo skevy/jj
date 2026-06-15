@@ -37,6 +37,10 @@ pub enum DebugWatchmanCommand {
     QueryClock,
     QueryChangedFiles,
     ResetClock,
+    #[command(hide = true)]
+    SetClock {
+        clock: String,
+    },
 }
 
 #[cfg(feature = "watchman")]
@@ -47,8 +51,12 @@ pub async fn cmd_debug_watchman(
 ) -> Result<(), CommandError> {
     use jj_lib::local_working_copy::LockedLocalWorkingCopy;
 
-    let mut workspace_command = command.workspace_helper(ui).await?;
-    let repo = workspace_command.repo().clone();
+    let mut workspace_command = match subcommand {
+        DebugWatchmanCommand::ResetClock | DebugWatchmanCommand::SetClock { .. } => {
+            command.workspace_helper_no_snapshot(ui).await?
+        }
+        _ => command.workspace_helper(ui).await?,
+    };
     let watchman_config = WatchmanConfig {
         // The value is likely irrelevant here. TODO(ilyagr): confirm
         register_trigger: false,
@@ -114,7 +122,7 @@ pub async fn cmd_debug_watchman(
             let (_clock, changed_files) = wc.query_watchman(&watchman_config).await?;
             writeln!(ui.stdout(), "Changed files: {changed_files:?}")?;
         }
-        DebugWatchmanCommand::ResetClock => {
+        DebugWatchmanCommand::ResetClock | DebugWatchmanCommand::SetClock { .. } => {
             let (mut locked_ws, _commit) = workspace_command.start_working_copy_mutation().await?;
             let Some(locked_local_wc): Option<&mut LockedLocalWorkingCopy> =
                 locked_ws.locked_wc().downcast_mut()
@@ -123,9 +131,18 @@ pub async fn cmd_debug_watchman(
                     "This command requires a standard local-disk working copy",
                 ));
             };
-            locked_local_wc.reset_watchman()?;
-            locked_ws.finish(repo.op_id().clone()).await?;
-            writeln!(ui.status(), "Reset Watchman clock")?;
+            match subcommand {
+                DebugWatchmanCommand::ResetClock => locked_local_wc.reset_watchman()?,
+                DebugWatchmanCommand::SetClock { clock } => {
+                    locked_local_wc.set_watchman_clock(clock.clone())?
+                }
+                _ => unreachable!(),
+            }
+            let operation_id = locked_ws.locked_wc().old_operation_id().clone();
+            locked_ws.finish(operation_id).await?;
+            if matches!(subcommand, DebugWatchmanCommand::ResetClock) {
+                writeln!(ui.status(), "Reset Watchman clock")?;
+            }
         }
     }
     Ok(())

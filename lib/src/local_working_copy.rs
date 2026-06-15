@@ -3025,6 +3025,12 @@ impl LockedLocalWorkingCopy {
         Ok(())
     }
 
+    pub fn set_watchman_clock(&mut self, clock: String) -> Result<(), SnapshotError> {
+        self.wc.tree_state_mut()?.set_watchman_clock(clock);
+        self.tree_state_dirty = true;
+        Ok(())
+    }
+
     pub fn reset_watchman(&mut self) -> Result<(), SnapshotError> {
         self.wc.tree_state_mut()?.reset_watchman();
         self.tree_state_dirty = true;
