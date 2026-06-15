@@ -57,6 +57,7 @@ use prost::Message as _;
 use rayon::iter::IntoParallelIterator as _;
 use rayon::prelude::IndexedParallelIterator as _;
 use rayon::prelude::ParallelIterator as _;
+use rayon::slice::ParallelSliceMut as _;
 use tempfile::NamedTempFile;
 use thiserror::Error;
 use tracing::instrument;
@@ -2594,7 +2595,7 @@ impl TreeState {
                 })?;
             file_states.push((path, file_state_from_git_index_entry(entry)?));
         }
-        file_states.sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
+        file_states.par_sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
 
         self.file_states = FileStatesMap::new();
         self.file_states.merge_in(file_states, &HashSet::new());
