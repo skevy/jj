@@ -399,7 +399,15 @@ pub async fn cmd_workspace_add(
 
     #[cfg(feature = "git")]
     if args.existing_git_worktree {
-        let git_index = git::get_git_repo(new_workspace_command.repo().store())?
+        let destination_repo = gix::ThreadSafeRepository::open_opts(
+            destination_path.join(".git"),
+            gix::open::Options::isolated(),
+        )
+        .map_err(|err| {
+            internal_error_with_message("Failed to open the colocated Git worktree", err)
+        })?;
+        let git_index = destination_repo
+            .to_thread_local()
             .index_or_empty()
             .map_err(|err| {
                 internal_error_with_message("Failed to read the colocated Git index", err)

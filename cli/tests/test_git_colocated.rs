@@ -2530,6 +2530,32 @@ fn test_workspace_add_adopts_existing_git_worktree() {
         String::from_utf8_lossy(&output.stderr)
     );
 
+    // The source and destination worktrees have separate indexes. A conflict
+    // in the source must not prevent adopting the clean destination index.
+    let source_git_repo = git::open(work_dir.root());
+    let mut source_index = gix::index::File::from_state(
+        gix::index::State::new(source_git_repo.object_hash()),
+        source_git_repo.index_path(),
+    );
+    for (contents, stage) in [
+        (b"base".as_slice(), gix::index::entry::Stage::Base),
+        (b"ours".as_slice(), gix::index::entry::Stage::Ours),
+        (b"theirs".as_slice(), gix::index::entry::Stage::Theirs),
+    ] {
+        let blob_id = source_git_repo.write_blob(contents).unwrap().detach();
+        source_index.dangerously_push_entry(
+            gix::index::entry::Stat::default(),
+            blob_id,
+            gix::index::entry::Flags::from_stage(stage),
+            gix::index::entry::Mode::FILE,
+            b"source-conflict".into(),
+        );
+    }
+    source_index.sort_entries();
+    source_index
+        .write(gix::index::write::Options::default())
+        .unwrap();
+
     work_dir.write_file("source-only", "dirty");
     let source_wc_before = work_dir
         .run_jj([
