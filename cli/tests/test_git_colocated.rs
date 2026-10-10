@@ -1980,6 +1980,202 @@ fn test_git_colocated_operation_cleanup() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn test_workspace_add_adopts_existing_git_worktree() -> TestResult {
+    let test_env = TestEnvironment::default();
+    let work_dir = test_env.work_dir("repo");
+    let second_work_dir = test_env.work_dir("second");
+
+    test_env
+        .run_jj_in(".", ["git", "init", "--colocate", "repo"])
+        .success();
+    work_dir.write_file("file", "contents");
+    work_dir.write_file("prefix/file", "nested");
+    work_dir.write_file("prefix-sibling", "sibling");
+    work_dir.run_jj(["commit", "-m", "first commit"]).success();
+    let commit = work_dir
+        .run_jj(["log", "--no-graph", "-T", "commit_id", "-r", "@-"])
+        .success()
+        .stdout
+        .into_raw();
+
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(work_dir.root())
+        .args(["worktree", "add", "--detach"])
+        .arg(second_work_dir.root())
+        .arg(&commit)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "git worktree add failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(second_work_dir.root())
+        .args(["update-index", "--refresh"])
+        .output()?;
+    assert!(
+        output.status.success(),
+        "git update-index failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let file_mtime_before = std::fs::metadata(second_work_dir.root().join("file"))?.modified()?;
+
+    // Linked worktrees have separate indexes. A conflict in the source must not
+    // prevent adopting the clean destination index, or be overwritten by it.
+    let source_git_repo = git::open(work_dir.root());
+    let mut source_index = gix::index::File::from_state(
+        gix::index::State::new(source_git_repo.object_hash()),
+        source_git_repo.index_path(),
+    );
+    for (contents, stage) in [
+        (b"base".as_slice(), gix::index::entry::Stage::Base),
+        (b"ours".as_slice(), gix::index::entry::Stage::Ours),
+        (b"theirs".as_slice(), gix::index::entry::Stage::Theirs),
+    ] {
+        let blob_id = source_git_repo.write_blob(contents)?.detach();
+        source_index.dangerously_push_entry(
+            gix::index::entry::Stat::default(),
+            blob_id,
+            gix::index::entry::Flags::from_stage(stage),
+            gix::index::entry::Mode::FILE,
+            b"source-conflict".into(),
+        );
+    }
+    source_index.sort_entries();
+    source_index
+        .write(gix::index::write::Options::default())
+        .unwrap();
+    let source_index_before = std::fs::read(source_git_repo.index_path())?;
+
+    work_dir.write_file("source-only", "dirty");
+    let source_wc_before = work_dir
+        .run_jj([
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-T",
+            "commit_id",
+            "-r",
+            "@",
+        ])
+        .success()
+        .stdout
+        .into_raw();
+
+    work_dir
+        .run_jj([
+            "workspace",
+            "add",
+            "--existing-git-worktree",
+            "--watchman-clock",
+            "c:1:2",
+            "--name",
+            "second",
+            "-r",
+            &commit,
+            "../second",
+        ])
+        .success();
+    let source_wc_after = work_dir
+        .run_jj([
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-T",
+            "commit_id",
+            "-r",
+            "@",
+        ])
+        .success()
+        .stdout
+        .into_raw();
+    assert_eq!(source_wc_after, source_wc_before);
+    assert_eq!(
+        std::fs::read(source_git_repo.index_path())?,
+        source_index_before
+    );
+    assert_eq!(second_work_dir.read_file("file"), b"contents");
+    assert_eq!(second_work_dir.read_file("prefix/file"), b"nested");
+    assert_eq!(second_work_dir.read_file("prefix-sibling"), b"sibling");
+    assert_eq!(
+        std::fs::metadata(second_work_dir.root().join("file"))?.modified()?,
+        file_mtime_before
+    );
+    let colocation = get_colocation_status(&second_work_dir).success();
+    assert!(
+        colocation
+            .stdout
+            .normalized()
+            .contains("Workspace 'second' is currently colocated with Git.")
+    );
+    assert!(colocation.stdout.normalized().contains(&commit));
+
+    let status = second_work_dir
+        .run_jj(["--config", "fsmonitor.backend=none", "status"])
+        .success();
+    assert!(
+        status
+            .stdout
+            .normalized()
+            .contains("The working copy has no changes.")
+    );
+    let workspace_list = work_dir
+        .run_jj(["--ignore-working-copy", "workspace", "list"])
+        .success();
+    assert!(workspace_list.stdout.normalized().contains("second:"));
+
+    // Restoring full sparsity must make edits and new files visible to snapshots.
+    second_work_dir.write_file("file", "edited");
+    second_work_dir.write_file("new-file", "new");
+    let status = second_work_dir
+        .run_jj(["--config", "fsmonitor.backend=none", "status"])
+        .success();
+    assert!(status.stdout.normalized().contains("M file"));
+    assert!(status.stdout.normalized().contains("A new-file"));
+    Ok(())
+}
+
+#[test]
+fn test_workspace_add_adopts_existing_git_worktree_validation() {
+    let test_env = TestEnvironment::default();
+    test_env
+        .run_jj_in(".", ["git", "init", "--colocate", "repo"])
+        .success();
+    test_env
+        .run_jj_in(".", ["git", "init", "--colocate", "unrelated"])
+        .success();
+    let work_dir = test_env.work_dir("repo");
+    let output = work_dir.run_jj([
+        "workspace",
+        "add",
+        "--existing-git-worktree",
+        "../unrelated",
+    ]);
+    insta::assert_snapshot!(output, @"
+    ------- stderr -------
+    Error: Existing Git worktree belongs to a different repository
+    [EOF]
+    [exit status: 1]
+    ");
+    let output = work_dir.run_jj([
+        "workspace",
+        "add",
+        "--existing-git-worktree",
+        "--sparse-patterns=empty",
+        "../second",
+    ]);
+    insta::assert_snapshot!(output, @"
+    ------- stderr -------
+    Error: --existing-git-worktree cannot be combined with --sparse-patterns
+    [EOF]
+    [exit status: 1]
+    ");
+    assert!(!test_env.work_dir("second").root().exists());
+}
+
 #[must_use]
 fn get_bookmark_output(work_dir: &TestWorkDir) -> CommandOutput {
     // --quiet to suppress deleted bookmarks hint

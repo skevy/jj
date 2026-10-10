@@ -20,9 +20,15 @@ use jj_lib::commit::CommitIteratorExt as _;
 use jj_lib::file_util;
 use jj_lib::file_util::IoResultExt as _;
 #[cfg(feature = "git")]
+use jj_lib::git;
+#[cfg(feature = "git")]
 use jj_lib::git::GitSubprocessOptions;
 #[cfg(feature = "git")]
 use jj_lib::git::create_worktree;
+#[cfg(feature = "git")]
+use jj_lib::git_backend::GitRepoAtWorkdirError;
+#[cfg(feature = "git")]
+use jj_lib::local_working_copy::LockedLocalWorkingCopy;
 use jj_lib::ref_name::WorkspaceNameBuf;
 use jj_lib::repo::Repo as _;
 use jj_lib::rewrite::merge_commit_trees;
@@ -103,6 +109,16 @@ pub struct WorkspaceAddArgs {
     #[arg(long, conflicts_with = "colocate")]
     no_colocate: bool,
 
+    /// Attach to an existing worktree without checking out its files.
+    #[cfg(feature = "git")]
+    #[arg(long, hide = true, conflicts_with = "no_colocate")]
+    existing_git_worktree: bool,
+
+    /// A Watchman clock captured before attachment began.
+    #[cfg(feature = "git")]
+    #[arg(long, hide = true, requires = "existing_git_worktree")]
+    watchman_clock: Option<String>,
+
     /// How to handle sparse patterns when creating a new workspace.
     #[arg(long, value_enum, default_value_t = SparseInheritance::Copy)]
     sparse_patterns: SparseInheritance,
@@ -114,7 +130,17 @@ pub async fn cmd_workspace_add(
     command: &CommandHelper,
     args: &WorkspaceAddArgs,
 ) -> Result<(), CommandError> {
-    let old_workspace_command = command.workspace_helper(ui).await?;
+    #[cfg(feature = "git")]
+    let adopt_existing = args.existing_git_worktree;
+    #[cfg(not(feature = "git"))]
+    let adopt_existing = false;
+    // Adoption only needs source repository metadata. Snapshotting its working
+    // copy can be expensive and would couple otherwise independent worktrees.
+    let old_workspace_command = if adopt_existing {
+        command.workspace_helper_no_snapshot(ui).await?
+    } else {
+        command.workspace_helper(ui).await?
+    };
     let destination_path = command.cwd().join(&args.destination);
     let workspace_name = if let Some(name) = &args.name {
         name.to_owned()
@@ -128,6 +154,11 @@ pub async fn cmd_workspace_add(
     if workspace_name.as_str().is_empty() {
         return Err(user_error("New workspace name cannot be empty"));
     }
+    if adopt_existing && args.sparse_patterns != SparseInheritance::Copy {
+        return Err(user_error(
+            "--existing-git-worktree cannot be combined with --sparse-patterns",
+        ));
+    }
 
     let repo = old_workspace_command.repo();
     if repo.view().get_wc_commit_id(&workspace_name).is_some() {
@@ -136,12 +167,41 @@ pub async fn cmd_workspace_add(
             name = workspace_name.as_symbol()
         )));
     }
-    if !destination_path.exists() {
-        fs::create_dir(&destination_path).context(&destination_path)?;
-    } else if !file_util::is_empty_dir(&destination_path)? {
-        return Err(user_error(
-            "Destination path exists and is not an empty directory",
-        ));
+    #[cfg(feature = "git")]
+    let destination_git_repo = if adopt_existing {
+        if !old_workspace_command.working_copy_shared_with_git() {
+            return Err(user_error(
+                "--existing-git-worktree requires a colocated source workspace",
+            ));
+        }
+        if !destination_path.is_dir() {
+            return Err(user_error(format!(
+                "Existing Git worktree does not exist: {}",
+                destination_path.display()
+            )));
+        }
+        // The backend checks that the worktree shares the source Git repository.
+        // Keep its handle so seeding reads the destination's separate index.
+        let git_repo = git::get_git_backend(repo.store())?
+            .open_git_repo_at_workdir(&destination_path)
+            .map_err(|err| match err {
+                GitRepoAtWorkdirError::Unrelated { .. } => {
+                    user_error("Existing Git worktree belongs to a different repository")
+                }
+                err => user_error(format!("Failed to open existing Git worktree: {err}")),
+            })?;
+        Some(git_repo)
+    } else {
+        None
+    };
+    if !adopt_existing {
+        if !destination_path.exists() {
+            fs::create_dir(&destination_path).context(&destination_path)?;
+        } else if !file_util::is_empty_dir(&destination_path)? {
+            return Err(user_error(
+                "Destination path exists and is not an empty directory",
+            ));
+        }
     }
 
     #[cfg(feature = "git")]
@@ -154,7 +214,7 @@ pub async fn cmd_workspace_add(
             old_workspace_command.working_copy_shared_with_git()
                 && old_workspace_command.settings().get_bool("git.colocate")?
         };
-        if should_colocate {
+        if should_colocate && !adopt_existing {
             let subprocess_options =
                 GitSubprocessOptions::from_settings(old_workspace_command.settings())?;
             create_worktree(repo.store(), subprocess_options, &destination_path)?;
@@ -205,6 +265,13 @@ pub async fn cmd_workspace_add(
                 .to_vec();
             Some(sparse_patterns)
         }
+    };
+    // Initialize the commit without materializing any files over the populated
+    // worktree. Seeding below restores full sparsity and the existing file stats.
+    let sparsity = if adopt_existing {
+        Some(vec![])
+    } else {
+        sparsity
     };
 
     if let Some(sparse_patterns) = sparsity {
@@ -275,5 +342,28 @@ pub async fn cmd_workspace_add(
         ),
     )
     .await?;
+
+    #[cfg(feature = "git")]
+    if let Some(destination_git_repo) = destination_git_repo {
+        let git_index = destination_git_repo.index_or_empty().map_err(|err| {
+            internal_error_with_message("Failed to read the colocated Git index", err)
+        })?;
+        let (mut locked_ws, _wc_commit) =
+            new_workspace_command.start_working_copy_mutation().await?;
+        let Some(locked_local_wc): Option<&mut LockedLocalWorkingCopy> =
+            locked_ws.locked_wc().downcast_mut()
+        else {
+            return Err(user_error(
+                "--existing-git-worktree requires a standard local-disk working copy",
+            ));
+        };
+        locked_local_wc
+            .seed_from_git_index(&git_index, args.watchman_clock.as_deref())
+            .map_err(|err| {
+                internal_error_with_message("Failed to seed working copy from Git index", err)
+            })?;
+        let operation_id = locked_ws.locked_wc().old_operation_id().clone();
+        locked_ws.finish(operation_id).await?;
+    }
     Ok(())
 }
