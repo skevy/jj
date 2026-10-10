@@ -1412,6 +1412,29 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/revset-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Revset evaluation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2143,7 +2166,6 @@ something like <code>jj log -r '"x-"'</code>.</p>
 <ol>
 <li>Tag name</li>
 <li>Bookmark name</li>
-<li>Git ref</li>
 <li>Commit ID or change ID</li>
 </ol>
 <p>To override the priority, use the appropriate <a href="#functions">revset function</a>. For
@@ -2379,12 +2401,11 @@ indicates that all of the following usages are valid:</p>
   <code>first_ancestors()</code> can be used to exclude changes made on other branches.</p>
 </li>
 <li>
-<p><code>reachable(srcs, domain)</code>: All commits reachable from <code>srcs</code> within
-  <code>domain</code>, traversing all parent and child edges. <code>srcs</code> outside <code>domain</code> are
-  not considered even if a parent or child edge would reach into <code>domain</code>.</p>
-<p>This is useful for finding all related commits in a branch or feature without
-traversing outside a defined scope. For example, <code>reachable(@, mutable())</code>
-returns the stack of commits you are working on.</p>
+<p><code>reachable(srcs, domain)</code>: All commits reachable from <code>srcs</code>, traversing all
+  parent and child edges, such that the entire path is within <code>domain</code>. This is
+  useful for finding all related commits in a branch or feature without
+  traversing outside a defined scope. For example, <code>reachable(@, mutable())</code>
+  returns the stack of commits you are working on.</p>
 </li>
 <li>
 <p><code>connected(x)</code>: Same as <code>x::x</code>. Useful when <code>x</code> includes several commits.</p>
@@ -2448,6 +2469,16 @@ its possible targets are included.</p>
   targets across all remotes. See <code>remote_bookmarks()</code> for arguments.</p>
 </li>
 <li>
+<p><code>tracked_remote_tags([name_pattern], [[remote=]remote_pattern])</code>: All targets
+  of tracked remote tags. Supports the same optional arguments as
+  <code>remote_tags()</code>.</p>
+</li>
+<li>
+<p><code>untracked_remote_tags([name_pattern], [[remote=]remote_pattern])</code>: All
+  targets of untracked remote tags. Supports the same optional arguments as
+  <code>remote_tags()</code>.</p>
+</li>
+<li>
 <p><code>visible_heads()</code>: All visible heads (same as <code>heads(all())</code> if no hidden
   revisions are mentioned).</p>
 </li>
@@ -2478,6 +2509,14 @@ its possible targets are included.</p>
   in <code>x</code>. If <code>x</code> resolves to a single commit, <code>fork_point(x)</code> resolves to <code>x</code>.</p>
 </li>
 <li>
+<p><code>merge_point(x)</code>: The merge point of all commits in <code>x</code>. Similar to the fork
+  point, the merge point is the common descendant(s) of all commits in <code>x</code> which
+  do not have any ancestors that are also common descendants of all commits in
+  <code>x</code>. It is equivalent to the revset <code>roots(x_1:: &amp; x_2:: &amp; ... &amp; x_N::)</code>,
+  where <code>x_{1..N}</code> are commits in <code>x</code>. If <code>x</code> resolves to a single commit,
+  <code>merge_point(x)</code> resolves to <code>x</code>.</p>
+</li>
+<li>
 <p><code>bisect(x)</code>: Finds commits in the input set for which about half of the input
   set are descendants. The current implementation deals somewhat poorly with
   non-linear history.</p>
@@ -2489,6 +2528,9 @@ its possible targets are included.</p>
 </li>
 <li>
 <p><code>merges()</code>: Merge commits.</p>
+</li>
+<li>
+<p><code>forks()</code>: Fork commits, i.e. those with more than 1 child.</p>
 </li>
 <li>
 <p><code>description(pattern)</code>: Commits that have a description matching the given
@@ -2516,8 +2558,8 @@ example, <code>description("")</code> matches commits without description, and
   <a href="#string-patterns">string pattern</a>.</p>
 </li>
 <li>
-<p><code>author_date(pattern)</code>: Commits with author dates matching the specified <a href="#date-patterns">date
-  pattern</a>.</p>
+<p><code>author_date(pattern)</code>: Commits with <a href="../glossary/#author-date">author dates</a>
+  matching the specified <a href="#date-patterns">date pattern</a>.</p>
 </li>
 <li>
 <p><code>mine()</code>: Commits where the author's email matches the email of the current
@@ -2537,8 +2579,9 @@ example, <code>description("")</code> matches commits without description, and
   given <a href="#string-patterns">string pattern</a>.</p>
 </li>
 <li>
-<p><code>committer_date(pattern)</code>: Commits with committer dates matching the specified
-  <a href="#date-patterns">date pattern</a>.</p>
+<p><code>committer_date(pattern)</code>: Commits with
+  <a href="../glossary/#committer-date">committer dates</a> matching the specified <a href="#date-patterns">date
+  pattern</a>.</p>
 </li>
 <li>
 <p><code>signed()</code>: Commits that are cryptographically signed.</p>
@@ -2746,18 +2789,24 @@ always resolves to exactly one commit. For example:</p>
 </code></pre></div>
 </li>
 <li>
+<p><code>builtin_log()</code>: Resolves to <code>present(@) |
+  ancestors(immutable_heads().., 2) | trunk()</code>. It is used as the default value
+  for <code>revsets.log</code>, which is the set of revisions shown by <code>jj log</code> if no
+  revisions or paths are specified.</p>
+</li>
+<li>
 <p><code>builtin_immutable_heads()</code>: Resolves to <code>trunk() | tags() |
-  untracked_remote_bookmarks()</code>. It is used as the default definition for
-  <code>immutable_heads()</code> below. It is not recommended to redefine this
-  alias. Prefer to redefine <code>immutable_heads()</code> instead.</p>
+  untracked_remote_bookmarks() | untracked_remote_tags()</code>. It is used as the
+  default definition for <code>immutable_heads()</code> below. It is not recommended to
+  redefine this alias. Prefer to redefine <code>immutable_heads()</code> instead.</p>
 </li>
 <li>
 <p><code>immutable_heads()</code>: The heads of the set of immutable commits (not "heads
   that are immutable"). Resolves to <code>trunk() | tags() |
-  untracked_remote_bookmarks()</code> by default. It is actually defined as
-  <code>builtin_immutable_heads()</code>, and can be overridden as required. The full set
-  of immutable commits is <code>::immutable_heads()</code> (i.e., <code>immutable()</code>). See
-  <a href="../config/#set-of-immutable-commits">here</a> for details.</p>
+  untracked_remote_bookmarks() | untracked_remote_tags()</code> by default. It is
+  actually defined as <code>builtin_immutable_heads()</code>, and can be overridden as
+  required. The full set of immutable commits is <code>::immutable_heads()</code> (i.e.,
+  <code>immutable()</code>). See <a href="../config/#set-of-immutable-commits">here</a> for details.</p>
 </li>
 <li>
 <p><code>immutable()</code>: The set of commits that <code>jj</code> treats as immutable. This is

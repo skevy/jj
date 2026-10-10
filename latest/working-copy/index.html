@@ -1346,6 +1346,29 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/revset-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Revset evaluation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2037,13 +2060,21 @@ even if they match ignore patterns. You can untrack such files with the
 <code>.jj/</code> directory linked to the main repo. The working copy and the <code>.jj/</code>
 directory together is called a "workspace". Each workspace can have a different
 commit checked out.</p>
-<p>Having multiple workspaces can be useful for running long-running tests in a one
+<p>Having multiple workspaces can be useful for running long-running tests in one
 while you continue developing in another, for example. If needed,
 <code>jj workspace root --name &lt;workspace&gt;</code> prints the root path of the specified
 workspace (defaults to the current one).</p>
+<p><code>jj workspace list</code> shows every workspace together with its available root path.</p>
 <p>When you're done using a workspace, use <code>jj workspace forget</code> to make the repo
-forget about it. The files can be deleted from disk separately (either before or
-after).</p>
+forget about it. The workspace directory and files are left on disk. This is
+useful when the workspace path is no longer accessible or when you want to keep
+the files around.</p>
+<p>Use <code>jj workspace remove</code> to forget a workspace and remove its directory from
+disk. Tracked changes are snapshotted before the directory is removed, but
+ignored files in that directory are deleted. The main workspace cannot be
+removed. Removing the current workspace works on Unix, but Windows won't remove
+a directory that a process is running in; run the command from another directory
+using <code>jj -R</code> instead.</p>
 <h2 id="stale-working-copy">Stale working copy<a class="headerlink" href="#stale-working-copy" title="Permanent link">&para;</a></h2>
 <p>Almost all commands go through three main steps:</p>
 <ol>

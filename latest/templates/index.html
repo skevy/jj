@@ -979,30 +979,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Keywords">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#commit-keywords" class="md-nav__link">
-    <span class="md-ellipsis">
-      Commit keywords
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#operation-keywords" class="md-nav__link">
-    <span class="md-ellipsis">
-      Operation keywords
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -1172,6 +1148,15 @@
   <a href="#email-type" class="md-nav__link">
     <span class="md-ellipsis">
       Email type
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fspath-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      FsPath type
     </span>
   </a>
   
@@ -1394,6 +1379,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#treevalue-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      TreeValue type
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#workspaceref-type" class="md-nav__link">
     <span class="md-ellipsis">
       WorkspaceRef type
@@ -1437,6 +1431,15 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
   
 </li>
       
@@ -1759,6 +1762,29 @@
   
   <span class="md-ellipsis">
     Conflicts
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/revset-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Revset evaluation
     
   </span>
   
@@ -2334,30 +2360,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Keywords">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#commit-keywords" class="md-nav__link">
-    <span class="md-ellipsis">
-      Commit keywords
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#operation-keywords" class="md-nav__link">
-    <span class="md-ellipsis">
-      Operation keywords
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -2527,6 +2529,15 @@
   <a href="#email-type" class="md-nav__link">
     <span class="md-ellipsis">
       Email type
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fspath-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      FsPath type
     </span>
   </a>
   
@@ -2749,6 +2760,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#treevalue-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      TreeValue type
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#workspaceref-type" class="md-nav__link">
     <span class="md-ellipsis">
       WorkspaceRef type
@@ -2795,6 +2815,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2826,16 +2855,19 @@ methods.</p>
 <p>A couple of <code>jj</code> commands accept a template via <code>-T</code>/<code>--template</code> option.</p>
 <h2 id="keywords">Keywords<a class="headerlink" href="#keywords" title="Permanent link">&para;</a></h2>
 <p>Keywords represent objects of different types; the types are described in
-a follow-up section. In addition to context-specific keywords, the top-level
-object can be referenced as <code>self</code>.</p>
-<h3 id="commit-keywords">Commit keywords<a class="headerlink" href="#commit-keywords" title="Permanent link">&para;</a></h3>
-<p>In <code>jj log</code> templates, all 0-argument methods of <a href="#commit-type">the <code>Commit</code>
-type</a> are available as keywords. For example, <code>commit_id</code> is
-equivalent to <code>self.commit_id()</code>.</p>
-<h3 id="operation-keywords">Operation keywords<a class="headerlink" href="#operation-keywords" title="Permanent link">&para;</a></h3>
-<p>In <code>jj op log</code> templates, all 0-argument methods of <a href="#operation-type">the <code>Operation</code>
-type</a> are available as keywords. For example,
-<code>current_operation</code> is equivalent to <code>self.current_operation()</code>.</p>
+the following sections. The top-level object for a template can always be
+referenced as <code>self</code>. Its concrete type depends on the command (and is
+documented on each command's <code>--template</code> help).</p>
+<p>In any template, all 0-argument methods of that top-level <code>self</code> type are
+available as keywords. For example:</p>
+<ul>
+<li>In <code>jj log</code>, <code>self</code> is <a href="#commit-type">the <code>Commit</code> type</a>, so <code>commit_id</code> is
+  equivalent to <code>self.commit_id()</code>.</li>
+<li>In <code>jj op log</code>, <code>self</code> is <a href="#operation-type">the <code>Operation</code> type</a>, so
+  <code>current_operation</code> is equivalent to <code>self.current_operation()</code>.</li>
+<li>In <code>jj file list</code>, <code>self</code> is <a href="#treeentry-type">the <code>TreeEntry</code> type</a>, so
+  <code>path</code> is equivalent to <code>self.path()</code>.</li>
+</ul>
 <h2 id="operators">Operators<a class="headerlink" href="#operators" title="Permanent link">&para;</a></h2>
 <p>The following operators are supported. <code>x</code> and <code>y</code> below can be any expression.</p>
 <p>Operators are listed in order of binding power from strongest to weakest, e.g.
@@ -2904,8 +2936,9 @@ y) * z</code>.</p>
 <h2 id="global-functions">Global functions<a class="headerlink" href="#global-functions" title="Permanent link">&para;</a></h2>
 <p>The following functions are defined.</p>
 <ul>
-<li><code>fill(width: Integer, content: Template) -&gt; Template</code>: Fill lines at
-  the given <code>width</code>.</li>
+<li><code>fill(width: Integer, content: Template, [break_words: bool]) -&gt; Template</code>:
+  Fill lines at the given <code>width</code>. If <code>break_words</code> is <code>true</code>, any words longer
+  than <code>width</code> will be split to fit in <code>width</code> characters.</li>
 <li><code>indent(prefix: Template, content: Template) -&gt; Template</code>: Indent
   non-empty lines by the given <code>prefix</code>.</li>
 <li><code>pad_start(width: Integer, content: Template, [fill_char: Template])</code>: Pad (or
@@ -2957,9 +2990,14 @@ including capture group 0 for the full match.</p>
 <p><code>stringify(content: Stringify) -&gt; String</code>: Format <code>content</code> to string. This
   effectively removes color labels.</p>
 </li>
-<li><code>json(value: Serialize) -&gt; String</code>: Serialize <code>value</code> in JSON format.</li>
+<li><code>json(value: Serialize) -&gt; String</code>: Serialize <code>value</code> in JSON format. To
+  serialize multiple values as a JSON object, use <code>json({key =&gt; value, ..})</code>.
+  For example, <code>json({"commit_id" =&gt; commit_id, "tags" =&gt; tags})</code>.</li>
 <li><code>if(condition: Boolean, then: Any, [else: Any]) -&gt; Any</code>:
   Conditionally evaluates to <code>then</code> / <code>else</code> content.</li>
+<li><code>try(expr: Any, fallback: Any...) -&gt; Any</code>: Evaluates each expression in order
+  and returns the first successful result. Suppresses preceding runtime errors,
+  but lets parsing errors (such as type errors) pass through.</li>
 <li><code>coalesce(content: Template...) -&gt; Template</code>: Returns the first <strong>non-empty</strong>
   content.</li>
 <li><code>concat(content: Template...) -&gt; Template</code>:
@@ -3236,6 +3274,17 @@ multiple <code>@</code>s.</p>
 <li><code>.domain() -&gt; String</code>: the part of the email after the first <code>@</code> or the empty
   string.</li>
 </ul>
+<h3 id="fspath-type"><code>FsPath</code> type<a class="headerlink" href="#fspath-type" title="Permanent link">&para;</a></h3>
+<p><em>Conversion: <code>Boolean</code>: no, <code>Serialize</code>: yes, <code>Template</code>: yes</em></p>
+<p>A filesystem path. Paths can contain bytes that are not valid UTF-8. Rendering
+and path formatting methods preserve those bytes. Serialization with <code>json()</code>
+follows Rust's <code>Path</code> serialization, which can reject non-UTF-8 paths.</p>
+<p>The following methods are defined.</p>
+<ul>
+<li><code>.absolute() -&gt; FsPath</code>: Return an absolute filesystem path.</li>
+<li><code>.relative() -&gt; FsPath</code>: Return the path relative to the current working
+  directory.</li>
+</ul>
 <h3 id="integer-type"><code>Integer</code> type<a class="headerlink" href="#integer-type" title="Permanent link">&para;</a></h3>
 <p><em>Conversion: <code>Boolean</code>: no, <code>Serialize</code>: yes, <code>Template</code>: yes</em></p>
 <p>No methods are defined.</p>
@@ -3255,10 +3304,9 @@ defined.</p>
   the predicate <code>expression</code>. Example: <code>parents.any(|c| c.description().contains("fix"))</code></li>
 <li><code>.all(|item| expression) -&gt; Boolean</code>: Returns true if all elements satisfy
   the predicate <code>expression</code>. Example: <code>parents.all(|c| c.mine())</code></li>
-<li><code>.first() -&gt; T</code>: Returns the first element. Errors if the list is empty.</li>
-<li><code>.last() -&gt; T</code>: Returns the last element. Errors if the list is empty.</li>
-<li><code>.get(index: Integer) -&gt; T</code>: Returns the element at <code>index</code> (0-based). Errors
-  if the index is out of bounds.</li>
+<li><code>.first() -&gt; Option&lt;T&gt;</code>: Returns the first element.</li>
+<li><code>.last() -&gt; Option&lt;T&gt;</code>: Returns the last element.</li>
+<li><code>.get(index: Integer) -&gt; Option&lt;T&gt;</code>: Returns the element at <code>index</code> (0-based).</li>
 <li><code>.reverse() -&gt; List</code>: Returns the list in reverse order.</li>
 <li><code>.skip(count: Integer) -&gt; List</code>: Skips the first <code>count</code> elements and
   returns the rest.</li>
@@ -3300,6 +3348,10 @@ contained value is set. If set, all methods of the contained value can be
 invoked. If not set, an error will be reported inline on method call.</p>
 <p>On comparison between two optional values or optional and non-optional values,
 unset value is not an error. Unset value is considered less than any set values.</p>
+<p>Types convertible to <code>Boolean</code> (e.g. <code>String</code> and <code>List</code>) lack support for
+<code>Option</code> because the truthy conversion of an unset value would conflict with
+it. Instead, unset values of these types are converted to their empty
+equivalents.</p>
 <h3 id="refsymbol-type"><code>RefSymbol</code> type<a class="headerlink" href="#refsymbol-type" title="Permanent link">&para;</a></h3>
 <p><em>Conversion: <code>Boolean</code>: no, <code>Serialize</code>: yes, <code>Template</code>: yes</em></p>
 <p><a href="#string-type">A <code>String</code> type</a>, but is formatted as revset symbol by quoting
@@ -3323,8 +3375,7 @@ to <code>Boolean</code>.</p>
 <p>A slash-separated path relative to the repository root. The following methods
 are defined.</p>
 <ul>
-<li><code>.absolute() -&gt; String</code>: Format as absolute path using platform-native
-  separator.</li>
+<li><code>.absolute() -&gt; FsPath</code>: Absolute filesystem path.</li>
 <li><code>.display() -&gt; String</code>: Format path for display. The formatted path uses
   platform-native separator, and is relative to the current working directory.</li>
 <li><code>.parent() -&gt; Option&lt;RepoPath&gt;</code>: Parent directory path.</li>
@@ -3396,7 +3447,7 @@ following methods are defined.</p>
   of a UTF-8 codepoint, the codepoint is fully part of the result. If the <code>end</code>
   index is in the middle of a UTF-8 codepoint, the codepoint is not part of the
   result. If <code>end</code> is not given, returns from <code>start</code> to the end of the string.</li>
-<li><code>.first_line() -&gt; String</code></li>
+<li><code>.first_line() -&gt; String</code>: Equivalent to <code>.lines().first()</code>.</li>
 <li><code>.lines() -&gt; List&lt;String&gt;</code>: Split into lines excluding newline characters.</li>
 <li><code>.split(separator: StringPattern, [limit: Integer]) -&gt; List&lt;String&gt;</code>: Split
   into substrings by the given <code>separator</code> pattern. If <code>limit</code> is specified, it
@@ -3500,7 +3551,10 @@ only occur directly in the call site they are used in.</p>
 <li><code>.color_words([context: Integer]) -&gt; Template</code>: Format as a word-level diff
   with changes indicated only by color.</li>
 <li><code>.git([context: Integer]) -&gt; Template</code>: Format as a Git diff.</li>
-<li><code>.stat([width: Integer]) -&gt; DiffStats</code>: Calculate stats of changed lines.</li>
+<li><code>.stat([width: Integer], [max_bar_width: Integer]) -&gt; DiffStats</code>: Calculate
+  stats of changed lines. <code>width</code> sets the entire width of the diff stat
+  including paths, and <code>max_bar_width</code> limits the maximum character length of
+  the <code>++--</code> bar.</li>
 <li><code>.summary() -&gt; Template</code>: Format as a list of status code and path pairs.</li>
 </ul>
 <h3 id="treediffentry-type"><code>TreeDiffEntry</code> type<a class="headerlink" href="#treediffentry-type" title="Permanent link">&para;</a></h3>
@@ -3522,6 +3576,9 @@ only occur directly in the call site they are used in.</p>
 <p>This type cannot be printed. The following methods are defined.</p>
 <ul>
 <li><code>.path() -&gt; RepoPath</code>: Path to the entry.</li>
+<li><code>.normal_value() -&gt; Option&lt;TreeValue&gt;</code>: The resolved value of the entry, or none
+  if the entry is absent or conflicted. Here, "normal" means resolved, not just a
+  regular file: symlinks, trees, and Git submodules are also included.</li>
 <li><code>.conflict() -&gt; Boolean</code>: True if the entry is a merge conflict.</li>
 <li><code>.conflict_side_count() -&gt; Integer</code>: Number of sides in the merge conflict (1 if not
   conflicted, 2 or more for multi-way merges).</li>
@@ -3529,13 +3586,23 @@ only occur directly in the call site they are used in.</p>
   <code>"git-submodule"</code>, or <code>"conflict"</code>.</li>
 <li><code>.executable() -&gt; Boolean</code>: True if the entry is an executable file.</li>
 </ul>
+<h3 id="treevalue-type"><code>TreeValue</code> type<a class="headerlink" href="#treevalue-type" title="Permanent link">&para;</a></h3>
+<p><em>Conversion: <code>Boolean</code>: no, <code>Serialize</code>: no, <code>Template</code>: yes</em></p>
+<p>A file, symlink, tree, or Git submodule value. Its default formatting is
+its full hexadecimal object ID. For a Git submodule, this is the recorded commit
+ID. No methods are defined.</p>
 <h3 id="workspaceref-type"><code>WorkspaceRef</code> type<a class="headerlink" href="#workspaceref-type" title="Permanent link">&para;</a></h3>
 <p><em>Conversion: <code>Boolean</code>: no, <code>Serialize</code>: yes, <code>Template</code>: yes</em></p>
 <p>The following methods are defined.</p>
 <ul>
 <li><code>.name() -&gt; RefSymbol</code>: Returns the workspace name as a symbol.</li>
 <li><code>.target() -&gt; Commit</code>: Returns the working-copy commit of this workspace.</li>
-<li><code>.root() -&gt; Template</code>: Returns the absolute path to the workspace root.</li>
+<li>
+<p><code>.root() -&gt; Option&lt;FsPath&gt;</code>: Returns the workspace root path, if the root path
+  is recorded.</p>
+<p>This is optional because workspaces created before jj 0.38.0 did not record
+workspace root paths.</p>
+</li>
 </ul>
 <h2 id="color-labels">Color labels<a class="headerlink" href="#color-labels" title="Permanent link">&para;</a></h2>
 <p>You can <a href="../config/#custom-colors-and-styles">customize the output colors</a> by using color labels. <code>jj</code>
@@ -3547,9 +3614,12 @@ following template is labeled as <code>op_log operation id short</code> automati
 </code></pre></div>
 <p>The exact names of such labels are often straightforward, but are not currently
 documented. You can discover the actual label names used with the
-<code>--color=debug</code> option, e.g.</p>
+<code>--color=debug</code> option:</p>
 <div class="highlight"><pre><span></span><code>jj<span class="w"> </span>op<span class="w"> </span>log<span class="w"> </span>-T<span class="w"> </span><span class="s1">&#39;self.id().short()&#39;</span><span class="w"> </span>--color<span class="o">=</span>debug
 </code></pre></div>
+<p>This can be useful if you are trying to figure out whether or not a label is
+present or which labels you should define or override colors for to get the
+output that you want.</p>
 <p>Additionally, you can <strong>manually</strong> insert arbitrary labels using the
 <code>label(label, content)</code> function. For example,</p>
 <div class="highlight"><pre><span></span><code>jj<span class="w"> </span>op<span class="w"> </span>log<span class="w"> </span>-T<span class="w"> </span><span class="s1">&#39;&quot;ID: &quot; ++ self.id().short().substr(0, 1) ++ label(&quot;id short&quot;, &quot;&lt;redacted&gt;&quot;)&#39;</span>
@@ -3560,11 +3630,19 @@ arbitrary template instead of the string <code>"&lt;redacted&gt;"</code>, possib
 nested invocations of <code>label()</code>.</p>
 <p>You are free to use custom label names as well. This will only have a visible
 effect if you also <a href="../config/#custom-colors-and-styles">customize their colors</a> explicitly.</p>
+<p>To see all the default colors and what customizations apply from your own
+config, run:</p>
+<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>config<span class="w"> </span>list<span class="w"> </span>--include-defaults<span class="w"> </span>--include-overridden<span class="w"> </span>colors
+</code></pre></div>
+<p>The default colors can be found in <a href="https://github.com/jj-vcs/jj/blob/main/cli/src/config/colors.toml"><code>colors.toml</code></a>, and the default
+explicitly added labels (such as <code>mutable</code> or <code>divergent</code>) can be found in
+<a href="https://github.com/jj-vcs/jj/blob/main/cli/src/config/templates.toml"><code>templates.toml</code></a>. Labels that appear in <code>colors.toml</code> but that
+are not explicitly present in <code>templates.toml</code> will have been automatically
+added by <code>jj</code> (such as <code>author</code> or <code>change_id</code>).</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p>The default templates and aliases() are defined in the <code>[templates]</code> and
 <code>[template-aliases]</code> sections of the config respectively. The exact definitions
-can be seen in the <a href="https://github.com/jj-vcs/jj/blob/main/cli/src/config/templates.toml"><code>cli/src/config/templates.toml</code></a> file in jj's source
-tree.</p>
+can be seen in the <a href="https://github.com/jj-vcs/jj/blob/main/cli/src/config/templates.toml"><code>templates.toml</code></a> file.</p>
 <!--- TODO: Find a way to embed the default config files in the docs -->
 
 <p>New keywords, functions, and <code>&lt;name&gt;:&lt;value&gt;</code> patterns can be defined as
@@ -3581,6 +3659,8 @@ functions will be shadowed by name, and can't co-exist with aliases.</p>
 <span class="s1">  format_field(&quot;Change ID&quot;, change_id),</span>
 <span class="s1">)</span>
 <span class="s1">&#39;&#39;&#39;</span>
+<span class="s1">&#39;format_field(key, value)&#39;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;key ++ &quot;: &quot; ++ value ++ &quot;\n&quot;&#39;</span>
+<span class="s1">&#39;json:x&#39;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;json(x) ++ &quot;\n&quot;&#39;</span>
 </code></pre></div>
 <h3 id="alias-descriptions">Alias descriptions<a class="headerlink" href="#alias-descriptions" title="Permanent link">&para;</a></h3>
 <p>Alias descriptions can be surfaced in shell completions by defining the alias
@@ -3589,24 +3669,25 @@ as a table with <code>.doc</code> and <code>.definition</code> properties. For e
 <span class="n">sh</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">definition</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s1">&#39;commit_id.short()&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">doc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s1">&#39;Short commit ID&#39;</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <p>You can also use the dotted key syntax:</p>
-<p><div class="highlight"><pre><span></span><code><span class="k">[template-aliases]</span>
+<div class="highlight"><pre><span></span><code><span class="k">[template-aliases]</span>
 <span class="n">sh</span><span class="p">.</span><span class="n">definition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;commit_id.short()&#39;</span>
 <span class="n">sh</span><span class="p">.</span><span class="n">doc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Short commit ID&#39;</span>
 </code></pre></div>
-'format_field(key, value)' = 'key ++ ": " ++ value ++ "\n"'
-'json:x' = 'json(x) ++ "\n"'
-<div class="highlight"><pre><span></span><code>## Examples
-
-Get short commit IDs of the working-copy parents:
-
-```sh
-jj log -G -r @ -T &#39;parents.map(|c| c.commit_id().short()).join(&quot;,&quot;)&#39;
-</code></pre></div></p>
+<h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
+<p>Print the object IDs on both sides of a diff:</p>
+<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>diff<span class="w"> </span>-T<span class="w"> </span><span class="s1">&#39;path ++ &quot; &quot; ++ self.source().normal_value() ++ &quot; -&gt; &quot; ++ self.target().normal_value() ++ &quot;\n&quot;&#39;</span>
+</code></pre></div>
+<p>Get short commit IDs of the working-copy parents:</p>
+<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>log<span class="w"> </span>-G<span class="w"> </span>-r<span class="w"> </span>@<span class="w"> </span>-T<span class="w"> </span><span class="s1">&#39;parents.map(|c| c.commit_id().short()).join(&quot;,&quot;)&#39;</span>
+</code></pre></div>
 <p>Show machine-readable list of full commit and change IDs:</p>
 <div class="highlight"><pre><span></span><code>jj<span class="w"> </span>log<span class="w"> </span>-G<span class="w"> </span>-T<span class="w"> </span><span class="s1">&#39;commit_id ++ &quot; &quot; ++ change_id ++ &quot;\n&quot;&#39;</span>
 </code></pre></div>
 <p>Print the description of the current commit, defaulting to <code>(no description set)</code>:</p>
 <div class="highlight"><pre><span></span><code>jj<span class="w"> </span>log<span class="w"> </span>-G<span class="w"> </span>-r<span class="w"> </span>@<span class="w"> </span>-T<span class="w"> </span><span class="s1">&#39;coalesce(description, &quot;(no description set)\n&quot;)&#39;</span>
+</code></pre></div>
+<p>For each revision, print the name of its first bookmark or change ID:</p>
+<div class="highlight"><pre><span></span><code>jj<span class="w"> </span>log<span class="w"> </span>-T<span class="w"> </span><span class="s1">&#39;try(bookmarks.first().name(), change_id.shortest(8)) ++ &quot;\n&quot;&#39;</span>
 </code></pre></div>
 
 

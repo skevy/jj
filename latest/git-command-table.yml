@@ -115,7 +115,8 @@
     `jj file untrack filename`
   Notes: >
     File name must match an ignore pattern to remain untracked. See
-    [the documentation for working copies](../working-copy/#introduction) for more.
+    [the documentation for working copies](working-copy.md#introduction) for
+    more.
 
 - Use case: Modify a file in the current change
   Git command: >
@@ -176,7 +177,7 @@
   Git command: >
     `git grep foo`
   Jujutsu command: >
-    `grep foo $(jj file list)`
+    `jj file search --pattern=foo`
     or `rg --no-require-git foo`
   Notes:
 
