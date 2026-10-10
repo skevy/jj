@@ -45,6 +45,7 @@ use jj_lib::fsmonitor::FsmonitorSettings;
 use jj_lib::git::get_git_backend;
 use jj_lib::gitignore::GitIgnoreFile;
 use jj_lib::local_working_copy::LocalWorkingCopy;
+use jj_lib::local_working_copy::LockedLocalWorkingCopy;
 use jj_lib::local_working_copy::TreeState;
 use jj_lib::local_working_copy::TreeStateSettings;
 use jj_lib::matchers::FilesMatcher;
@@ -52,6 +53,7 @@ use jj_lib::merge::Merge;
 use jj_lib::merge::SameChange;
 use jj_lib::merged_tree::MergedTree;
 use jj_lib::merged_tree_builder::MergedTreeBuilder;
+use jj_lib::object_id::ObjectId as _;
 use jj_lib::op_store::OperationId;
 use jj_lib::protos::local_working_copy as working_copy_proto;
 use jj_lib::ref_name::WorkspaceName;
@@ -141,6 +143,69 @@ fn test_root() -> TestResult {
     let wc_commit = repo.store().get_commit(wc_commit_id)?;
     assert_tree_eq!(new_tree, wc_commit.tree());
     assert_tree_eq!(new_tree, repo.store().empty_merged_tree());
+    Ok(())
+}
+
+#[test_case(&[("file", "after")] ; "staged modification")]
+#[test_case(&[("file", "before"), ("new", "added")] ; "staged addition")]
+#[test_case(&[] ; "staged deletion")]
+fn test_seed_from_git_index_preserves_staged_changes(files: &[(&str, &str)]) -> TestResult {
+    let mut test_workspace = TestWorkspace::init_with_backend(TestRepoBackend::Git);
+    let repo = &test_workspace.repo;
+    let baseline = create_tree(repo, &[(repo_path("file"), "before")]);
+    let commit = commit_with_tree(repo.store(), baseline);
+    test_workspace
+        .workspace
+        .check_out(repo.op_id().clone(), None, &commit)
+        .block_on()?;
+    let workspace_root = test_workspace.workspace.workspace_root();
+
+    // Model Git staging changes while an attachment has initialized its baseline
+    // but has not yet seeded the cache. The index stats match the edited files.
+    std::fs::remove_file(workspace_root.join("file"))?;
+    for &(path, contents) in files {
+        let path = workspace_root.join(path);
+        std::fs::write(&path, contents)?;
+        // Older than the state file, so racy-mtime protection cannot conceal a
+        // bad cache entry by forcing the snapshot to read the file anyway.
+        File::options()
+            .write(true)
+            .open(path)?
+            .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1))?;
+    }
+    let tree_entries = files
+        .iter()
+        .map(|&(path, contents)| (repo_path(path), contents))
+        .collect_vec();
+    let staged_tree = create_tree(repo, &tree_entries);
+    let git_repo = get_git_backend(repo.store())?.git_repo();
+    let mut index = git_repo.index_from_tree(&gix::ObjectId::from_bytes_or_panic(
+        staged_tree.tree_ids().as_resolved().unwrap().as_bytes(),
+    ))?;
+    for (entry, path) in index.entries_mut_with_paths() {
+        let path = workspace_root.join(std::str::from_utf8(path)?);
+        let metadata = gix::index::fs::Metadata::from_path_no_follow(&path)?;
+        entry.stat = gix::index::entry::Stat::from_fs(&metadata)?;
+    }
+    let mut locked_ws = test_workspace
+        .workspace
+        .start_working_copy_mutation()
+        .block_on()?;
+    let locked_wc: &mut LockedLocalWorkingCopy = locked_ws.locked_wc().downcast_mut().unwrap();
+    locked_wc
+        .seed_from_git_index(&index, Some("c:1:2"))
+        .block_on()?;
+    locked_ws.finish(repo.op_id().clone()).block_on()?;
+
+    let state_path = test_workspace
+        .repo_path()
+        .parent()
+        .unwrap()
+        .join("working_copy/tree_state");
+    let proto = working_copy_proto::TreeState::decode(std::fs::read(state_path)?.as_slice())?;
+    assert!(proto.watchman_clock.is_none());
+    let snapshot = test_workspace.snapshot()?;
+    assert_tree_eq!(snapshot, staged_tree);
     Ok(())
 }
 

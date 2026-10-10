@@ -16,6 +16,8 @@ use std::fs;
 
 use futures::future::try_join_all;
 use itertools::Itertools as _;
+#[cfg(feature = "git")]
+use jj_lib::backend::CommitId;
 use jj_lib::commit::CommitIteratorExt as _;
 use jj_lib::file_util;
 use jj_lib::file_util::IoResultExt as _;
@@ -37,6 +39,8 @@ use tracing::instrument;
 
 use crate::cli_util::CommandHelper;
 use crate::cli_util::RevisionArg;
+#[cfg(feature = "git")]
+use crate::cli_util::start_repo_transaction;
 use crate::command_error::CommandError;
 use crate::command_error::internal_error_with_message;
 use crate::command_error::user_error;
@@ -194,6 +198,69 @@ pub async fn cmd_workspace_add(
     } else {
         None
     };
+
+    #[cfg(feature = "git")]
+    let old_workspace_command = if let Some(git_repo) = &destination_git_repo {
+        // Git-first callers can request a commit that JJ hasn't imported yet.
+        // Import only the destination HEAD's metadata, without the source
+        // workspace's snapshot or the Git exports performed by tx.finish().
+        let mut tx = start_repo_transaction(
+            old_workspace_command.repo(),
+            old_workspace_command.workspace_name(),
+            command.string_args(),
+        );
+        if let Ok(oid) = git_repo.head_id() {
+            let head_id = CommitId::from_bytes(oid.as_bytes());
+            if !tx.repo().index().has_id(&head_id).await? {
+                git::get_git_backend(tx.repo().store())?
+                    .import_head_commits([&head_id])
+                    .map_err(|err| git::GitImportError::MissingHeadTarget {
+                        id: head_id.clone(),
+                        err,
+                    })?;
+            }
+            let commit = tx.repo().store().get_commit_async(&head_id).await?;
+            tx.repo_mut().add_head(&commit).await?;
+        }
+        if tx.repo().has_changes() {
+            let repo = tx.commit("import existing Git worktree head").await?;
+            command.for_workable_repo(ui, command.load_workspace()?, repo)?
+        } else {
+            old_workspace_command
+        }
+    } else {
+        old_workspace_command
+    };
+
+    let repo = old_workspace_command.repo();
+    // Resolve revisions before creating or registering the destination, so an
+    // invalid revision leaves an existing Git worktree available for retry.
+    let parents = if args.revisions.is_empty() {
+        // Use the source working-copy commit's parents, or the root if there is
+        // no working-copy commit in the source workspace.
+        if let Some(old_wc_commit_id) = repo
+            .view()
+            .get_wc_commit_id(old_workspace_command.workspace_name())
+        {
+            repo.store()
+                .get_commit_async(old_wc_commit_id)
+                .await?
+                .parents()
+                .await?
+        } else {
+            vec![repo.store().root_commit()]
+        }
+    } else {
+        try_join_all(
+            old_workspace_command
+                .resolve_some_revsets(ui, &args.revisions)
+                .await?
+                .iter()
+                .map(|id| repo.store().get_commit_async(id)),
+        )
+        .await?
+    };
+
     if !adopt_existing {
         if !destination_path.exists() {
             fs::create_dir(&destination_path).context(&destination_path)?;
@@ -288,36 +355,6 @@ pub async fn cmd_workspace_add(
 
     let mut tx = new_workspace_command.start_transaction();
 
-    // If no parent revisions are specified, create a working-copy commit based
-    // on the parent of the current working-copy commit.
-    let parents = if args.revisions.is_empty() {
-        // Check out parents of the current workspace's working-copy commit, or the
-        // root if there is no working-copy commit in the current workspace.
-        if let Some(old_wc_commit_id) = tx
-            .base_repo()
-            .view()
-            .get_wc_commit_id(old_workspace_command.workspace_name())
-        {
-            tx.repo()
-                .store()
-                .get_commit_async(old_wc_commit_id)
-                .await?
-                .parents()
-                .await?
-        } else {
-            vec![tx.repo().store().root_commit()]
-        }
-    } else {
-        try_join_all(
-            old_workspace_command
-                .resolve_some_revsets(ui, &args.revisions)
-                .await?
-                .iter()
-                .map(|id| tx.repo().store().get_commit_async(id)),
-        )
-        .await?
-    };
-
     let tree = merge_commit_trees(tx.repo(), &parents).await?;
     let parent_ids = parents.iter().ids().cloned().collect_vec();
     let mut commit_builder = tx.repo_mut().new_commit(parent_ids, tree).detach();
@@ -359,6 +396,7 @@ pub async fn cmd_workspace_add(
         };
         locked_local_wc
             .seed_from_git_index(&git_index, args.watchman_clock.as_deref())
+            .await
             .map_err(|err| {
                 internal_error_with_message("Failed to seed working copy from Git index", err)
             })?;

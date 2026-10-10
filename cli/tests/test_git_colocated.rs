@@ -2139,6 +2139,102 @@ fn test_workspace_add_adopts_existing_git_worktree() -> TestResult {
 }
 
 #[test]
+fn test_workspace_add_adopts_unimported_git_head() -> TestResult {
+    let test_env = TestEnvironment::default();
+    let work_dir = test_env.work_dir("repo");
+    let second_work_dir = test_env.work_dir("second");
+    let git_repo = git::init(work_dir.root());
+    let first = git::add_commit(
+        &git_repo,
+        "refs/heads/master",
+        "file",
+        b"first",
+        "first",
+        &[],
+    );
+    git::checkout_tree_index(&git_repo, first.tree_id);
+    work_dir.run_jj(["git", "init", "--colocate"]).success();
+    let source_wc_before = work_dir
+        .run_jj([
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-Tcommit_id",
+            "-r@",
+        ])
+        .success()
+        .stdout;
+
+    let second = git::add_commit(
+        &git_repo,
+        "refs/heads/master",
+        "file",
+        b"second",
+        "second",
+        &[first.commit_id],
+    );
+    git::checkout_tree_index(&git_repo, second.tree_id);
+    git_repo
+        .index_from_tree(&second.tree_id)?
+        .write(gix::index::write::Options::default())
+        .unwrap();
+    work_dir.write_file("file", "dirty source");
+    let source_index_before = std::fs::read(git_repo.index_path())?;
+    let commit = second.commit_id.to_string();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(work_dir.root())
+        .args(["worktree", "add", "--detach"])
+        .arg(second_work_dir.root())
+        .arg(&commit)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    work_dir
+        .run_jj([
+            "workspace",
+            "add",
+            "--existing-git-worktree",
+            "--name",
+            "second",
+            "-r",
+            &commit,
+            "../second",
+        ])
+        .success();
+    assert_eq!(second_work_dir.read_file("file"), b"second");
+    let parent = second_work_dir
+        .run_jj([
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-Tcommit_id",
+            "-r@-",
+        ])
+        .success();
+    assert_eq!(parent.stdout.into_raw(), commit);
+    let source_wc_after = work_dir
+        .run_jj([
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-Tcommit_id",
+            "-r@",
+        ])
+        .success()
+        .stdout;
+    assert_eq!(source_wc_after, source_wc_before);
+    assert_eq!(std::fs::read(git_repo.index_path())?, source_index_before);
+    assert_eq!(git_repo.head_id()?.detach(), second.commit_id);
+    assert_eq!(work_dir.read_file("file"), b"dirty source");
+    Ok(())
+}
+
+#[test]
 fn test_workspace_add_adopts_existing_git_worktree_validation() {
     let test_env = TestEnvironment::default();
     test_env
@@ -2174,6 +2270,52 @@ fn test_workspace_add_adopts_existing_git_worktree_validation() {
     [exit status: 1]
     ");
     assert!(!test_env.work_dir("second").root().exists());
+
+    work_dir.write_file("file", "contents");
+    work_dir.run_jj(["commit", "-m", "initial"]).success();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(work_dir.root())
+        .args(["worktree", "add", "--detach"])
+        .arg(test_env.work_dir("second").root())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = work_dir.run_jj([
+        "workspace",
+        "add",
+        "--existing-git-worktree",
+        "--name",
+        "second",
+        "-r",
+        "missing-revision",
+        "../second",
+    ]);
+    assert!(
+        output
+            .stderr
+            .normalized()
+            .contains("Revision `missing-revision` doesn't exist")
+    );
+    assert!(!test_env.work_dir("second").root().join(".jj").exists());
+    let list = work_dir
+        .run_jj(["--ignore-working-copy", "workspace", "list"])
+        .success();
+    assert!(!list.stdout.normalized().contains("second:"));
+    work_dir
+        .run_jj([
+            "workspace",
+            "add",
+            "--existing-git-worktree",
+            "--name",
+            "second",
+            "../second",
+        ])
+        .success();
 }
 
 #[must_use]

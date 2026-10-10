@@ -2710,20 +2710,13 @@ impl TreeState {
     }
 
     #[cfg(feature = "git")]
-    fn seed_from_git_index(
+    async fn seed_from_git_index(
         &mut self,
         git_index: &gix::index::State,
         watchman_clock: Option<&str>,
     ) -> Result<(), ResetError> {
-        let mut file_states = Vec::with_capacity(git_index.entries().len());
+        let mut entries = Vec::with_capacity(git_index.entries().len());
         for entry in git_index.entries() {
-            if entry.stage() != gix::index::entry::Stage::Unconflicted {
-                let message = "Cannot seed JJ file state from a conflicted Git index".to_string();
-                return Err(ResetError::Other {
-                    message: message.clone(),
-                    err: io::Error::other(message).into(),
-                });
-            }
             let path = entry
                 .path(git_index)
                 .to_str()
@@ -2736,16 +2729,69 @@ impl TreeState {
                     message: "Git index path is not a valid repository path".to_string(),
                     err: err.into(),
                 })?;
-            file_states.push((path, file_state_from_git_index_entry(entry)?));
+            entries.push((path, entry));
         }
         // Git's bytewise index order differs from JJ's component-based path
         // ordering (for example, "prefix/file" and "prefix-sibling").
-        file_states.par_sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
+        entries.par_sort_unstable_by(|(path1, _), (path2, _)| path1.cmp(path2));
+
+        // Attachment runs in the background, so Git may have staged changes
+        // since the requested tree was initialized. Those stats describe the
+        // staged blobs, and must not make different working-copy contents look
+        // clean against our tree. Check the complete path set as well, so staged
+        // additions and deletions cannot leave the file-state map incomplete.
+        let mut matches_tree = true;
+        for pair in self.tree.entries().zip_longest(&entries) {
+            let EitherOrBoth::Both((tree_path, tree_value), (index_path, entry)) = pair else {
+                matches_tree = false;
+                break;
+            };
+            let tree_value = tree_value?;
+            let (id, mode) = match tree_value.as_resolved() {
+                Some(Some(TreeValue::File { id, executable, .. })) => (
+                    id.as_bytes(),
+                    if *executable {
+                        gix::index::entry::Mode::FILE_EXECUTABLE
+                    } else {
+                        gix::index::entry::Mode::FILE
+                    },
+                ),
+                Some(Some(TreeValue::Symlink(id))) => {
+                    (id.as_bytes(), gix::index::entry::Mode::SYMLINK)
+                }
+                Some(Some(TreeValue::GitSubmodule(id))) => {
+                    (id.as_bytes(), gix::index::entry::Mode::COMMIT)
+                }
+                _ => {
+                    matches_tree = false;
+                    break;
+                }
+            };
+            if tree_path != *index_path
+                || entry.stage() != gix::index::entry::Stage::Unconflicted
+                || entry.id.as_bytes() != id
+                || entry.mode != mode
+            {
+                matches_tree = false;
+                break;
+            }
+        }
+
+        self.sparse_patterns = vec![RepoPathBuf::root()];
+        self.watchman_clock = None;
+        if !matches_tree {
+            // Recover invalid stats from the baseline tree without reading or
+            // writing worktree files. Discard the clock so the next snapshot
+            // also sees paths that were removed from the index.
+            return self.recover(&self.tree.clone()).await;
+        }
+        let file_states = entries
+            .into_iter()
+            .map(|(path, entry)| file_state_from_git_index_entry(entry).map(|state| (path, state)))
+            .try_collect()?;
 
         self.file_states = FileStatesMap::new();
         self.file_states.merge_in(file_states, &HashSet::new());
-        self.sparse_patterns = vec![RepoPathBuf::root()];
-        self.watchman_clock = None;
         if let Some(clock) = watchman_clock {
             self.set_watchman_clock(clock.to_owned());
         }
@@ -3159,14 +3205,15 @@ impl LockedLocalWorkingCopy {
     /// Initialize file metadata for a populated Git worktree without walking it.
     /// The tree has already been reset to the worktree's requested revision.
     #[cfg(feature = "git")]
-    pub fn seed_from_git_index(
+    pub async fn seed_from_git_index(
         &mut self,
         git_index: &gix::index::State,
         watchman_clock: Option<&str>,
     ) -> Result<(), ResetError> {
         self.wc
             .tree_state_mut()?
-            .seed_from_git_index(git_index, watchman_clock)?;
+            .seed_from_git_index(git_index, watchman_clock)
+            .await?;
         self.tree_state_dirty = true;
         Ok(())
     }
